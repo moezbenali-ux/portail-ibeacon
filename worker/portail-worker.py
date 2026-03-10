@@ -32,6 +32,9 @@ GLOBAL_OPEN_COOLDOWN = 2
 
 HYSTERESIS_MARGIN = 5
 
+last_open_time = {}
+OPEN_COOLDOWN = 120  # secondes
+
 os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
 # ============================================================
@@ -95,7 +98,9 @@ def open_gate(beacon_key, name):
         return False
 
     last_time = last_open_times.get(beacon_key, 0)
-    if now - last_time < WORKER_OPEN_COOLDOWN:
+    if now - last_time < OPEN_COOLDOWN:
+        remaining = OPEN_COOLDOWN - (now - last_time)
+        log.info(f"⏱️ Anti-retour {name} : ouverture refusée ({remaining:.1f}s)")
         return False
 
     log.info(f"🔊 Tentative d'ouverture pour {name}")
@@ -229,43 +234,44 @@ def on_connect(client,userdata,flags,rc,properties=None):
         log.info("✅ Connecté MQTT")
         client.subscribe(MQTT_TOPIC_DETECT)
 
-def on_message(client,userdata,msg):
+def on_message(client, userdata, msg):
 
     try:
+        payload = json.loads(msg.payload.decode())
 
-        payload=json.loads(msg.payload.decode())
+        uuid = payload.get("uuid")
+        major = payload.get("major")
+        minor = payload.get("minor")
+        rssi = payload.get("rssi")
 
-        uuid=payload.get("uuid")
-        major=payload.get("major")
-        minor=payload.get("minor")
-        rssi=payload.get("rssi")
+        beacon_key = make_key(uuid, major, minor)
 
-        beacon_key=make_key(uuid,major,minor)
-
-        user=get_user_from_beacon(uuid,major,minor)
+        user = get_user_from_beacon(uuid, major, minor)
 
         if not user:
             return
 
-        name,email,threshold,active=user
+        name, email, threshold, active = user
 
         if not active:
             return
 
         log.info(f"📩 {name} RSSI {rssi}")
 
-        cancel_current_timer()
-        update_display(name)
-        schedule_clear()
-
-        eligible,returned=handle_presence_state(beacon_key,name,rssi,threshold)
+        eligible, returned = handle_presence_state(beacon_key, name, rssi, threshold)
 
         if not eligible:
             return
 
         if returned:
+            cancel_current_timer()
+            update_display(name)
+            schedule_clear()
+
             log.info(f"👤 {name} revient - OUVERTURE")
-            open_gate(beacon_key,name)
+            open_gate(beacon_key, name)
+        else:
+            log.info(f"👀 {name} déjà présent - pas de nouvel affichage")
 
     except Exception as e:
         log.error(e)
