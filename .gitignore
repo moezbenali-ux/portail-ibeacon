@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+
+logs/*
+!logs/.gitkeep
+
+data/*
+!data/.gitkeep
+
+*.bak
+*.backup
+*.swp
+.env

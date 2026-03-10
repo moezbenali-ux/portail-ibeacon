@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Radar des Balises - Portail</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            color: white;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .radar-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            justify-content: center;
+        }
+        .radar-card {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 15px;
+            padding: 20px;
+            width: 400px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .radar-title {
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        canvas {
+            width: 100%;
+            height: auto;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 50%;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 30px;
+        }
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .beacon-list {
+            margin-top: 30px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+        }
+        .beacon-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .beacon-minor {
+            font-weight: bold;
+            color: #ffd700;
+        }
+        .beacon-rssi {
+            font-family: monospace;
+            font-size: 1.2em;
+        }
+        .rssi-strong { color: #4caf50; }
+        .rssi-medium { color: #ff9800; }
+        .rssi-weak { color: #f44336; }
+        .refresh-btn {
+            display: block;
+            width: 200px;
+            margin: 20px auto;
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 50px;
+            color: white;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .refresh-btn:hover {
+            transform: scale(1.05);
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: rgba(255,255,255,0.7);
+        }
+        .error {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid #f44336;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🕸️ Radar des Balises Bluetooth</h1>
+        
+        <div id="error-message" class="error" style="display: none;"></div>
+        <div id="loading-message" class="loading">Chargement des données...</div>
+        
+        <div class="radar-container" id="radar-container">
+            <!-- Les graphiques seront ajoutés ici par JavaScript -->
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div>Balises détectées</div>
+                <div class="stat-value" id="total-beacons">0</div>
+            </div>
+            <div class="stat-card">
+                <div>Signal moyen</div>
+                <div class="stat-value" id="avg-rssi">-</div>
+            </div>
+            <div class="stat-card">
+                <div>Balises autorisées</div>
+                <div class="stat-value" id="authorized-beacons">0</div>
+            </div>
+        </div>
+
+        <div class="beacon-list" id="beacon-list">
+            <h3>📡 Balises détectées</h3>
+            <div id="beacons"></div>
+        </div>
+
+        <button class="refresh-btn" onclick="loadData()">🔄 Actualiser</button>
+        <div class="footer">Dernière mise à jour: <span id="last-update">jamais</span></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        let radarCharts = {};
+
+        async function loadData() {
+            try {
+                document.getElementById('loading-message').style.display = 'block';
+                document.getElementById('error-message').style.display = 'none';
+                document.getElementById('radar-container').innerHTML = '';
+                
+                const response = await fetch('/api/beacons/recent');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const beacons = await response.json();
+                
+                document.getElementById('loading-message').style.display = 'none';
+                
+                if (beacons.length === 0) {
+                    document.getElementById('error-message').style.display = 'block';
+                    document.getElementById('error-message').innerHTML = 'Aucune balise détectée récemment';
+                    return;
+                }
+                
+                updateBeaconList(beacons);
+                updateStats(beacons);
+                updateRadarCharts(beacons);
+                
+                document.getElementById('last-update').innerText = new Date().toLocaleTimeString();
+            } catch (error) {
+                console.error('Erreur:', error);
+                document.getElementById('loading-message').style.display = 'none';
+                document.getElementById('error-message').style.display = 'block';
+                document.getElementById('error-message').innerHTML = 'Erreur de chargement: ' + error.message;
+            }
+        }
+
+        function updateBeaconList(beacons) {
+            const container = document.getElementById('beacons');
+            container.innerHTML = '';
+            
+            // Trier par RSSI (signal fort en premier)
+            beacons.sort((a, b) => a.rssi - b.rssi);
+            
+            beacons.forEach(beacon => {
+                const rssiClass = beacon.rssi > -60 ? 'rssi-strong' : (beacon.rssi > -75 ? 'rssi-medium' : 'rssi-weak');
+                
+                const div = document.createElement('div');
+                div.className = 'beacon-item';
+                div.innerHTML = `
+                    <span class="beacon-minor">${beacon.name}</span>
+                    <span>
+                        <span class="beacon-rssi ${rssiClass}">${beacon.rssi} dBm</span>
+                        ${beacon.authorized ? ' ✅' : ' ❌'}
+                    </span>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function updateStats(beacons) {
+            document.getElementById('total-beacons').innerText = beacons.length;
+            
+            const avg = Math.round(beacons.reduce((sum, b) => sum + b.rssi, 0) / beacons.length);
+            document.getElementById('avg-rssi').innerText = avg + ' dBm';
+            
+            const authorized = beacons.filter(b => b.authorized).length;
+            document.getElementById('authorized-beacons').innerText = authorized;
+        }
+
+        function updateRadarCharts(beacons) {
+            const container = document.getElementById('radar-container');
+            container.innerHTML = '';
+            
+            // Grouper par type
+            const authorized = beacons.filter(b => b.authorized);
+            const unknown = beacons.filter(b => !b.authorized);
+            
+            if (authorized.length > 0) {
+                createRadarChart('Balises autorisées', authorized, container);
+            }
+            
+            if (unknown.length > 0) {
+                createRadarChart('Autres balises', unknown, container);
+            }
+        }
+
+        function createRadarChart(title, beacons, container) {
+            // Limiter à 8 balises maximum pour la lisibilité
+            if (beacons.length > 8) {
+                beacons = beacons.slice(0, 8);
+            }
+            
+            const card = document.createElement('div');
+            card.className = 'radar-card';
+            card.innerHTML = `<div class="radar-title">${title} (${beacons.length})</div><canvas></canvas>`;
+            container.appendChild(card);
+            
+            const canvas = card.querySelector('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Préparer les données pour le radar
+            const labels = beacons.map(b => {
+                // Tronquer les noms trop longs
+                let name = b.name;
+                if (name.length > 15) {
+                    name = name.substring(0, 12) + '...';
+                }
+                return name;
+            });
+            
+            const rssiData = beacons.map(b => {
+                // Normaliser le RSSI pour le graphique (entre 0 et 100)
+                // RSSI entre -100 et -30
+                return Math.max(0, Math.min(100, ((b.rssi + 100) * 100 / 70)));
+            });
+            
+            // Déterminer la couleur selon le type
+            const color = title.includes('autorisées') ? 
+                'rgba(76, 175, 80, 0.6)' : 'rgba(255, 152, 0, 0.6)';
+            
+            // Détruire l'ancien graphique s'il existe
+            if (radarCharts[title]) {
+                radarCharts[title].destroy();
+            }
+            
+            radarCharts[title] = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Puissance du signal',
+                        data: rssiData,
+                        backgroundColor: color,
+                        borderColor: color.replace('0.6', '1'),
+                        borderWidth: 2,
+                        pointBackgroundColor: color.replace('0.6', '1'),
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: color.replace('0.6', '1')
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 100,
+                            min: 0,
+                            ticks: {
+                                stepSize: 20,
+                                callback: (value) => {
+                                    // Convertir en RSSI approximatif
+                                    const rssi = Math.round((value * 70 / 100) - 100);
+                                    return rssi + ' dBm';
+                                },
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            angleLines: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            pointLabels: {
+                                color: 'white',
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const rssi = Math.round((context.raw * 70 / 100) - 100);
+                                    return `RSSI: ${rssi} dBm`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Charger les données au démarrage et toutes les 10 secondes
+        loadData();
+        setInterval(loadData, 10000);
+    </script>
+</body>
+</html>

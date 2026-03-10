@@ -1,0 +1,18 @@
+[Unit]
+Description=MQTT Worker Parking System
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=administrateur
+WorkingDirectory=/home/administrateur/parking-system
+Environment="PATH=/home/administrateur/parking-env/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/administrateur/parking-env/bin/python /home/administrateur/parking-system/mqtt-worker.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/administrateur/parking-system/worker.log
+StandardError=append:/home/administrateur/parking-system/worker.log
+
+[Install]
+WantedBy=multi-user.target

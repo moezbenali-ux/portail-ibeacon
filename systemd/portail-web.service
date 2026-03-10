@@ -1,0 +1,13 @@
+[Unit]
+Description=Portail Web Display
+After=network.target
+
+[Service]
+Type=simple
+User=administrateur
+WorkingDirectory=/home/administrateur/portail/web
+ExecStart=/home/administrateur/portail/venv/bin/python /home/administrateur/portail/web/app.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

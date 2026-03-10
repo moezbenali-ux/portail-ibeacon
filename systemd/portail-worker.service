@@ -1,0 +1,14 @@
+[Unit]
+Description=Portail MQTT Worker
+After=network.target mosquitto.service
+
+[Service]
+Type=simple
+User=administrateur
+WorkingDirectory=/home/administrateur/portail/worker
+ExecStart=/home/administrateur/portail/venv/bin/python /home/administrateur/portail/worker/portail-worker.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

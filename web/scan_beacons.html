@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Scan des Balises - Portail</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            color: white;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .filters {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .filter-group label {
+            font-weight: bold;
+            color: #ffd700;
+        }
+        .filter-group input {
+            padding: 8px;
+            border-radius: 5px;
+            border: none;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            font-family: monospace;
+        }
+        .filter-group input::placeholder {
+            color: rgba(255,255,255,0.5);
+        }
+        .filter-group button {
+            padding: 8px 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .filter-group button:hover {
+            transform: scale(1.05);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        th {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 15px;
+            text-align: left;
+            font-weight: bold;
+            color: #ffd700;
+        }
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            font-family: monospace;
+        }
+        tr:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        .rssi-strong { color: #4caf50; }
+        .rssi-medium { color: #ff9800; }
+        .rssi-weak { color: #f44336; }
+        .authorized {
+            background: rgba(76, 175, 80, 0.2);
+            border-left: 4px solid #4caf50;
+        }
+        .unknown {
+            background: rgba(244, 67, 54, 0.1);
+            border-left: 4px solid #f44336;
+        }
+        .uuid-display {
+            font-size: 0.9em;
+            color: #aaccff;
+        }
+        .refresh-btn {
+            display: block;
+            width: 200px;
+            margin: 20px auto;
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 50px;
+            color: white;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .refresh-btn:hover {
+            transform: scale(1.05);
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: rgba(255,255,255,0.7);
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+        }
+        .error {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid #f44336;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📡 Scan des Balises Bluetooth</h1>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div>Balises détectées</div>
+                <div class="stat-value" id="total-beacons">0</div>
+            </div>
+            <div class="stat-card">
+                <div>Autorisées</div>
+                <div class="stat-value" id="authorized-count">0</div>
+            </div>
+            <div class="stat-card">
+                <div>Inconnues</div>
+                <div class="stat-value" id="unknown-count">0</div>
+            </div>
+            <div class="stat-card">
+                <div>RSSI moyen</div>
+                <div class="stat-value" id="avg-rssi">-</div>
+            </div>
+        </div>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label>🔍 Filtrer par UUID:</label>
+                <input type="text" id="filter-uuid" placeholder="fda50693-...">
+            </div>
+            <div class="filter-group">
+                <label>🎯 Filtrer par Major:</label>
+                <input type="text" id="filter-major" placeholder="ex: 10065">
+            </div>
+            <div class="filter-group">
+                <label>🔢 Filtrer par Minor:</label>
+                <input type="text" id="filter-minor" placeholder="ex: 10129">
+            </div>
+            <div class="filter-group">
+                <button onclick="applyFilters()">Filtrer</button>
+                <button onclick="resetFilters()">Réinitialiser</button>
+            </div>
+        </div>
+
+        <div id="loading" class="loading">Chargement des données...</div>
+        <div id="error" class="error" style="display: none;"></div>
+
+        <table id="beacons-table" style="display: none;">
+            <thead>
+                <tr>
+                    <th>UUID</th>
+                    <th>Major</th>
+                    <th>Minor</th>
+                    <th>RSSI</th>
+                    <th>Statut</th>
+                    <th>Nom</th>
+                </tr>
+            </thead>
+            <tbody id="beacons-tbody">
+                <!-- Rempli par JavaScript -->
+            </tbody>
+        </table>
+
+        <button class="refresh-btn" onclick="loadBeacons()">🔄 Actualiser</button>
+        <div class="footer">Dernière mise à jour: <span id="last-update">jamais</span></div>
+    </div>
+
+    <script>
+        let allBeacons = [];
+        let filteredBeacons = [];
+
+        async function loadBeacons() {
+            try {
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('error').style.display = 'none';
+                document.getElementById('beacons-table').style.display = 'none';
+                
+                const response = await fetch('/api/beacons/recent');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                allBeacons = await response.json();
+                applyFilters();
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('beacons-table').style.display = 'table';
+                document.getElementById('last-update').innerText = new Date().toLocaleTimeString();
+                
+            } catch (error) {
+                console.error('Erreur:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').innerHTML = 'Erreur de chargement: ' + error.message;
+            }
+        }
+
+        function applyFilters() {
+            const filterUuid = document.getElementById('filter-uuid').value.toLowerCase();
+            const filterMajor = document.getElementById('filter-major').value;
+            const filterMinor = document.getElementById('filter-minor').value;
+            
+            filteredBeacons = allBeacons.filter(beacon => {
+                if (filterUuid && !beacon.uuid?.toLowerCase().includes(filterUuid)) return false;
+                if (filterMajor && beacon.major != filterMajor) return false;
+                if (filterMinor && beacon.minor != filterMinor) return false;
+                return true;
+            });
+            
+            updateTable();
+            updateStats();
+        }
+
+        function resetFilters() {
+            document.getElementById('filter-uuid').value = '';
+            document.getElementById('filter-major').value = '';
+            document.getElementById('filter-minor').value = '';
+            applyFilters();
+        }
+
+        function updateTable() {
+            const tbody = document.getElementById('beacons-tbody');
+            tbody.innerHTML = '';
+            
+            // Trier par RSSI (plus fort en premier)
+            filteredBeacons.sort((a, b) => a.rssi - b.rssi);
+            
+            filteredBeacons.forEach(beacon => {
+                const row = tbody.insertRow();
+                row.className = beacon.authorized ? 'authorized' : 'unknown';
+                
+                // Déterminer la classe CSS pour le RSSI
+                const rssiClass = beacon.rssi > -60 ? 'rssi-strong' : (beacon.rssi > -75 ? 'rssi-medium' : 'rssi-weak');
+                
+                // Formater l'UUID (tronquer si trop long)
+                let uuidDisplay = beacon.uuid || 'N/A';
+                if (uuidDisplay.length > 20) {
+                    uuidDisplay = uuidDisplay.substring(0, 8) + '...' + uuidDisplay.substring(uuidDisplay.length-8);
+                }
+                
+                row.innerHTML = `
+                    <td class="uuid-display" title="${beacon.uuid || 'N/A'}">${uuidDisplay}</td>
+                    <td>${beacon.major || 'N/A'}</td>
+                    <td>${beacon.minor || 'N/A'}</td>
+                    <td class="${rssiClass}">${beacon.rssi} dBm</td>
+                    <td>${beacon.authorized ? '✅ Autorisé' : '❌ Inconnu'}</td>
+                    <td>${beacon.name || 'N/A'}</td>
+                `;
+            });
+        }
+
+        function updateStats() {
+            document.getElementById('total-beacons').innerText = filteredBeacons.length;
+            
+            const authorized = filteredBeacons.filter(b => b.authorized).length;
+            document.getElementById('authorized-count').innerText = authorized;
+            document.getElementById('unknown-count').innerText = filteredBeacons.length - authorized;
+            
+            if (filteredBeacons.length > 0) {
+                const avg = Math.round(filteredBeacons.reduce((sum, b) => sum + b.rssi, 0) / filteredBeacons.length);
+                document.getElementById('avg-rssi').innerText = avg + ' dBm';
+            } else {
+                document.getElementById('avg-rssi').innerText = '-';
+            }
+        }
+
+        // Charger au démarrage et toutes les 5 secondes
+        loadBeacons();
+        setInterval(loadBeacons, 5000);
+    </script>
+</body>
+</html>

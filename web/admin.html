@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Portail</title>
+    <style>
+        body { font-family: Arial; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #333; }
+        .config { background: white; padding: 20px; border-radius: 10px; margin: 20px 0; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #667eea; color: white; }
+        input { padding: 5px; width: 80px; }
+        button { padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .delete-btn { background: #dc3545; }
+        .add-form { background: white; padding: 20px; border-radius: 10px; margin: 20px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+        .success { background: #d4edda; color: #155724; padding: 10px; border-radius: 5px; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚙️ Administration Portail</h1>
+
+        <h2>Ajouter un utilisateur</h2>
+        <div class="add-form">
+            <input type="number" id="new_minor" placeholder="Minor (ex: 26049)">
+            <input type="text" id="new_name" placeholder="Nom complet">
+            <input type="email" id="new_email" placeholder="Email">
+            <input type="number" id="new_threshold" placeholder="Seuil RSSI" value="-70">
+            <input type="text" id="new_uuid" placeholder="UUID" value="fda50693-a4e2-4fb1-afcf-c6eb07647825">
+            <input type="number" id="new_major" placeholder="Major" value="10065">
+            <label><input type="checkbox" id="new_active" checked> Actif</label>
+            <button onclick="addUser()">➕ Ajouter</button>
+        </div>
+
+        <h2>Utilisateurs</h2>
+        <table id="users-table">
+            <thead>
+                <tr>
+                    <th>Minor</th>
+                    <th>Nom</th>
+                    <th>Email</th>
+                    <th>UUID</th>
+                    <th>Major</th>
+                    <th>Seuil</th>
+                    <th>Actif</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Rempli par JavaScript -->
+            </tbody>
+        </table>
+
+        <div class="success" id="success-message">Opération réussie</div>
+    </div>
+
+    <script>
+        async function loadUsers() {
+            const response = await fetch('/api/users');
+            const users = await response.json();
+            const tbody = document.querySelector('#users-table tbody');
+            tbody.innerHTML = '';
+            users.sort((a, b) => a.minor - b.minor).forEach(user => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${user.minor}</td>
+                    <td><input type="text" id="name-${user.minor}" value="${user.name.replace(/"/g, '&quot;')}" style="width:150px"></td>
+                    <td><input type="email" id="email-${user.minor}" value="${user.email || ''}" style="width:180px"></td>
+                    <td><input type="text" id="uuid-${user.minor}" value="${user.uuid || ''}" style="width:200px"></td>
+                    <td><input type="number" id="major-${user.minor}" value="${user.major || ''}" style="width:60px"></td>
+                    <td><input type="number" id="threshold-${user.minor}" value="${user.rssi_threshold}" style="width:60px"></td>
+                    <td><input type="checkbox" id="active-${user.minor}" ${user.active ? 'checked' : ''}></td>
+                    <td>
+                        <button onclick="saveUser(${user.minor})">💾 Sauv.</button>
+                        <button class="delete-btn" onclick="deleteUser(${user.minor})">🗑️ Suppr.</button>
+                    </td>
+                `;
+            });
+        }
+
+        async function saveUser(minor) {
+            const name = document.getElementById(`name-${minor}`).value;
+            const email = document.getElementById(`email-${minor}`).value;
+            const uuid = document.getElementById(`uuid-${minor}`).value;
+            const major = document.getElementById(`major-${minor}`).value;
+            const threshold = document.getElementById(`threshold-${minor}`).value;
+            const active = document.getElementById(`active-${minor}`).checked;
+
+            const response = await fetch('/api/users/' + minor, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    name: name,
+                    email: email,
+                    uuid: uuid || null,
+                    major: major ? parseInt(major) : null,
+                    rssi_threshold: parseInt(threshold),
+                    active: active ? 1 : 0
+                })
+            });
+
+            if (response.ok) {
+                document.getElementById('success-message').style.display = 'block';
+                document.getElementById('success-message').innerText = 'Utilisateur modifié';
+                setTimeout(() => {
+                    document.getElementById('success-message').style.display = 'none';
+                }, 3000);
+                loadUsers();
+            }
+        }
+
+        async function deleteUser(minor) {
+            if (!confirm(`Supprimer l'utilisateur ${minor} ?`)) return;
+            
+            const response = await fetch('/api/users/' + minor, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                document.getElementById('success-message').style.display = 'block';
+                document.getElementById('success-message').innerText = 'Utilisateur supprimé';
+                setTimeout(() => {
+                    document.getElementById('success-message').style.display = 'none';
+                }, 3000);
+                loadUsers();
+            }
+        }
+
+        async function addUser() {
+            const minor = document.getElementById('new_minor').value;
+            const name = document.getElementById('new_name').value;
+            const email = document.getElementById('new_email').value;
+            const uuid = document.getElementById('new_uuid').value;
+            const major = document.getElementById('new_major').value;
+            const threshold = document.getElementById('new_threshold').value;
+            const active = document.getElementById('new_active').checked;
+
+            if (!minor || !name) {
+                alert('Minor et Nom sont obligatoires');
+                return;
+            }
+
+            const response = await fetch('/api/users', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    minor: parseInt(minor),
+                    name: name,
+                    email: email,
+                    uuid: uuid || null,
+                    major: major ? parseInt(major) : null,
+                    rssi_threshold: parseInt(threshold),
+                    active: active ? 1 : 0
+                })
+            });
+
+            if (response.ok) {
+                document.getElementById('new_minor').value = '';
+                document.getElementById('new_name').value = '';
+                document.getElementById('new_email').value = '';
+                document.getElementById('new_uuid').value = 'fda50693-a4e2-4fb1-afcf-c6eb07647825';
+                document.getElementById('new_major').value = '10065';
+                document.getElementById('new_threshold').value = '-70';
+                document.getElementById('new_active').checked = true;
+                
+                document.getElementById('success-message').style.display = 'block';
+                document.getElementById('success-message').innerText = 'Utilisateur ajouté';
+                setTimeout(() => {
+                    document.getElementById('success-message').style.display = 'none';
+                }, 3000);
+                loadUsers();
+            } else {
+                const error = await response.json();
+                alert('Erreur: ' + (error.error || 'Inconnue'));
+            }
+        }
+
+        loadUsers();
+    </script>
+</body>
+</html>
