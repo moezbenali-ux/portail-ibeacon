@@ -17,58 +17,94 @@ LOG_FILE = "/home/administrateur/portail/logs/portail.log"
 # Page d'affichage public (écran 27")
 HTML_PUBLIC = """
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-    <title>Portail Parking</title>
-    <style>
-        body { 
-            margin: 0; 
-            padding: 0; 
-            background: #000; 
-            color: #fff; 
-            font-family: 'Arial Black', sans-serif; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-            overflow: hidden;
-        }
-        #message { 
-            font-size: 10vw; 
-            text-align: center; 
-            animation: fade 1s;
-        }
-        @keyframes fade {
-            from { opacity: 0; transform: scale(0.9); }
-            to { opacity: 1; transform: scale(1); }
-        }
-        .timestamp {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            font-size: 1vw;
-            color: #666;
-        }
-    </style>
-    <script>
-        function updateDisplay() {
-            fetch('/current')
-                .then(r => r.json())
-                .then(data => {
-                    document.getElementById('message').innerText = data.message;
-                    if (data.timestamp) {
-                        let date = new Date(data.timestamp * 1000);
-                        document.getElementById('timestamp').innerText = date.toLocaleTimeString();
-                    }
-                });
-        }
-        setInterval(updateDisplay, 1000);
-        window.onload = updateDisplay;
-    </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portail Parking</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      text-align: center;
+    }
+
+    #clock {
+      position: absolute;
+      top: 30px;
+      right: 40px;
+      font-size: 32px;
+      font-weight: bold;
+    }
+
+    #message {
+      font-size: 64px;
+      font-weight: bold;
+      padding: 20px 40px;
+    }
+  </style>
 </head>
 <body>
-    <div id="message">En attente...</div>
-    <div id="timestamp" class="timestamp"></div>
+  <div id="clock"></div>
+  <div id="message">En attente...</div>
+
+  <script>
+    let lastCustomMessageAt = 0;
+
+    function updateClock() {
+      const now = new Date();
+      const date = now.toLocaleDateString('fr-FR', {
+        weekday: 'long',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+      const time = now.toLocaleTimeString('fr-FR');
+      document.getElementById('clock').textContent = date + ' ' + time;
+    }
+
+    async function refreshMessage() {
+      try {
+        const res = await fetch('/current');
+        const data = await res.json();
+
+        const messageEl = document.getElementById('message');
+        const nowMs = Date.now();
+
+        if (data.message && data.message !== 'En attente...') {
+          lastCustomMessageAt = nowMs;
+          messageEl.textContent = data.message;
+        } else {
+          if (nowMs - lastCustomMessageAt > 30000) {
+            messageEl.textContent = 'En attente...';
+          }
+        }
+      } catch (e) {
+        console.error('Erreur récupération message:', e);
+      }
+    }
+
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    refreshMessage();
+    setInterval(refreshMessage, 2000);
+
+    setInterval(() => {
+      const messageEl = document.getElementById('message');
+      const nowMs = Date.now();
+      if (nowMs - lastCustomMessageAt > 30000) {
+        messageEl.textContent = 'En attente...';
+      }
+    }, 1000);
+  </script>
 </body>
 </html>
 """
