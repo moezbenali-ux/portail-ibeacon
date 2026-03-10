@@ -1,14 +1,10 @@
-venv/
-__pycache__/
+# Fichiers temporaires
+*.log
 *.pyc
-
-logs/*
-!logs/.gitkeep
-
-data/*
-!data/.gitkeep
-
-*.bak
-*.backup
-*.swp
-.env
+__pycache__/
+*.db
+*.db.backup*
+/tmp/
+/venv/
+logs/
+data/

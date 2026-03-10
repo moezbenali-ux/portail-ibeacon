@@ -1,0 +1,310 @@
+#!/usr/bin/env python3
+import paho.mqtt.client as mqtt
+import json
+import sqlite3
+import os
+import threading
+import time
+import logging
+from datetime import datetime
+from logging.handlers import RotatingFileHandler
+
+# Configuration
+MQTT_HOST = "localhost"
+MQTT_PORT = 1883
+MQTT_TOPIC_DETECT = "parking/beacon/detected"
+MQTT_TOPIC_OPEN = "parking/relay/command"
+DB_PATH = os.path.expanduser("~/portail/data/users.db")
+DISPLAY_FILE = "/tmp/current_display.json"
+LOG_FILE = "/home/administrateur/portail/logs/portail.log"
+
+# Paramètres
+DISPLAY_DURATION = 60  # 1 minute
+ABSENT_THRESHOLD = -80  # En dessous, on considère comme faible
+VERY_WEAK_THRESHOLD = -95  # En dessous, absence immédiate
+ABSENT_REQUIRED = 3     # Nombre de détections faibles pour absence progressive
+
+# Créer le dossier logs
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+
+# Configuration du logging
+def setup_logging():
+    logger = logging.getLogger('portail')
+    logger.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    
+    file_handler = RotatingFileHandler(LOG_FILE, maxBytes=1024*1024, backupCount=5)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    return logger
+
+log = setup_logging()
+
+# Variables globales
+current_timer = None
+timer_lock = threading.Lock()
+last_open_time = 0
+last_person_minor = None
+person_seen_since_open = set()
+absent_count = {}  # Compteur d'absences par minor
+
+def init_db():
+    """Initialise la base de données SQLite"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                minor INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT,
+                rssi_threshold INTEGER DEFAULT -70,
+                active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        # Ajouter quelques utilisateurs de test
+        users = [
+            (26049, "Jean Dupont", "jean@roole.fr", -70),
+            (10129, "Amira Bouhdiba", "amira@roole.fr", -70),
+            (20055, "Pierre Durand", "pierre@roole.fr", -70),
+        ]
+        for user in users:
+            c.execute('''
+                INSERT OR IGNORE INTO users 
+                (minor, name, email, rssi_threshold) 
+                VALUES (?, ?, ?, ?)
+            ''', user)
+        
+        conn.commit()
+        conn.close()
+        log.info("✅ Base de données initialisée")
+    except Exception as e:
+        log.error(f"❌ Erreur initialisation BDD: {e}")
+
+def get_user_from_minor(minor):
+    """Récupère les infos d'un utilisateur"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("""
+            SELECT name, email, rssi_threshold, active 
+            FROM users WHERE minor = ?
+        """, (minor,))
+        result = c.fetchone()
+        conn.close()
+        return result
+    except Exception as e:
+        log.error(f"❌ Erreur lecture BDD: {e}")
+        return None
+
+def cancel_current_timer():
+    """Annule le timer d'affichage en cours"""
+    global current_timer
+    with timer_lock:
+        if current_timer and current_timer.is_alive():
+            current_timer.cancel()
+            log.debug("🕒 Ancien timer d'affichage annulé")
+            current_timer = None
+
+def clear_display():
+    """Efface l'affichage et réinitialise l'état"""
+    global last_person_minor, person_seen_since_open, absent_count
+    try:
+        if os.path.exists(DISPLAY_FILE):
+            os.remove(DISPLAY_FILE)
+        # Réinitialiser après expiration du timer
+        last_person_minor = None
+        person_seen_since_open.clear()
+        absent_count.clear()
+        log.info(f"🕒 Timer expiré - Affichage effacé, état réinitialisé")
+    except Exception as e:
+        log.error(f"❌ Erreur effacement affichage: {e}")
+
+def schedule_clear():
+    """Programme l'effacement de l'affichage"""
+    global current_timer
+    with timer_lock:
+        current_timer = threading.Timer(DISPLAY_DURATION, clear_display)
+        current_timer.daemon = True
+        current_timer.start()
+        log.debug(f"🕒 Nouveau timer d'affichage ({DISPLAY_DURATION}s)")
+
+def update_display(name):
+    """Met à jour l'affichage immédiatement"""
+    try:
+        data = {
+            "name": name,
+            "timestamp": time.time()
+        }
+        with open(DISPLAY_FILE, "w") as f:
+            json.dump(data, f)
+        log.info(f"📺 Affichage mis à jour: {name}")
+    except Exception as e:
+        log.error(f"❌ Erreur mise à jour affichage: {e}")
+
+def open_gate(minor, name):
+    """Envoie l'ordre d'ouverture à l'ESP32 via MQTT"""
+    global last_open_time, last_person_minor, person_seen_since_open
+    
+    try:
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        client.connect(MQTT_HOST, MQTT_PORT, 5)
+        result = client.publish(MQTT_TOPIC_OPEN, "OPEN")
+        client.disconnect()
+        
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            last_open_time = time.time()
+            last_person_minor = minor
+            # Réinitialiser les personnes vues (sauf celle-ci)
+            person_seen_since_open = {minor}
+            log.info(f"🔓 OUVERTURE PORTAIL pour {name}")
+        else:
+            log.warning(f"⚠️ Échec envoi ordre ouverture (code {result.rc}) pour {name}")
+            
+    except Exception as e:
+        log.error(f"❌ Erreur envoi ordre ouverture pour {name}: {e}")
+
+def on_connect(client, userdata, flags, rc, properties=None):
+    if rc == 0:
+        log.info(f"✅ Connecté à MQTT (code {rc})")
+        client.subscribe(MQTT_TOPIC_DETECT)
+        log.info(f"   Souscrit au topic: {MQTT_TOPIC_DETECT}")
+    else:
+        log.error(f"❌ Échec connexion MQTT (code {rc})")
+
+def on_message(client, userdata, msg):
+    global person_seen_since_open, last_person_minor, absent_count
+    
+    try:
+        payload = json.loads(msg.payload.decode())
+        minor = payload.get('minor')
+        rssi = payload.get('rssi')
+        
+        log.info(f"📩 Message reçu - Minor: {minor}, RSSI: {rssi}")
+        
+        # Gestion des absences
+        if rssi < VERY_WEAK_THRESHOLD:
+            log.info(f"   🚨 Signal extrêmement faible ({rssi}) - ABSENCE IMMÉDIATE")
+            if minor == last_person_minor:
+                last_person_minor = None
+                person_seen_since_open.clear()
+                log.info(f"   🚗 {minor} considéré comme absent (signal très faible)")
+            if minor in absent_count:
+                absent_count[minor] = 0
+        
+        elif rssi < ABSENT_THRESHOLD:
+            # Logique progressive
+            if minor not in absent_count:
+                absent_count[minor] = 1
+            else:
+                absent_count[minor] += 1
+            log.info(f"   📉 Signal faible ({rssi}), compteur absence: {absent_count[minor]}/{ABSENT_REQUIRED}")
+            
+            if absent_count[minor] >= ABSENT_REQUIRED:
+                if minor == last_person_minor:
+                    log.info(f"   🚗 {minor} considéré comme absent - réinitialisation")
+                    last_person_minor = None
+                    person_seen_since_open.clear()
+                absent_count[minor] = 0
+        else:
+            # Signal redevenu normal
+            if minor in absent_count:
+                log.info(f"   📈 Signal redevenu normal, compteur absence remis à 0")
+                absent_count[minor] = 0
+        
+        # Vérifier si l'utilisateur est autorisé
+        user = get_user_from_minor(minor)
+        if not user:
+            log.warning(f"⚠️ Minor {minor} non autorisé (pas dans la BDD)")
+            return
+            
+        name, email, threshold, active = user
+        if not active:
+            log.info(f"⏸️ Utilisateur {name} désactivé")
+            return
+            
+        log.info(f"✅ Utilisateur identifié: {name} (seuil: {threshold})")
+        
+        # Ajouter aux personnes vues
+        person_seen_since_open.add(minor)
+        
+        # Mise à jour affichage (toujours)
+        cancel_current_timer()
+        update_display(name)
+        schedule_clear()
+        
+        # Décision d'ouverture
+        if rssi > threshold:
+            # Signal assez fort
+            
+            # EXCEPTION POUR AMIRA (minor 10129) - OUVRE TOUJOURS !
+            if minor == 10129:
+                log.info(f"   ⭐ EXCEPTION Amira - OUVERTURE SYSTÉMATIQUE")
+                open_gate(minor, name)
+            
+            elif last_person_minor is None:
+                log.info(f"   👤 Personne récemment - OUVERTURE")
+                open_gate(minor, name)
+            elif minor == last_person_minor:
+                # Même personne - vérifier si elle était considérée absente
+                if minor in absent_count and absent_count[minor] >= ABSENT_REQUIRED:
+                    log.info(f"   👤 {name} était absent, ré-accueil - OUVERTURE")
+                    open_gate(minor, name)
+                    absent_count[minor] = 0
+                else:
+                    log.info(f"   👤 Même personne toujours présente - PAS D'OUVERTURE")
+            elif minor not in person_seen_since_open:
+                log.info(f"   👤 Nouvelle personne - OUVERTURE")
+                open_gate(minor, name)
+            else:
+                log.info(f"   👤 Personne déjà vue - PAS D'OUVERTURE")
+        else:
+            log.info(f"   📶 RSSI {rssi} ≤ seuil {threshold} → pas d'ouverture")
+            
+    except json.JSONDecodeError as e:
+        log.error(f"❌ Erreur décodage JSON: {e}")
+        log.debug(f"   Message brut: {msg.payload}")
+    except Exception as e:
+        log.error(f"❌ Erreur inattendue: {e}", exc_info=True)
+
+if __name__ == "__main__":
+    log.info("="*50)
+    log.info("🚀 PORTAIL WORKER - DÉMARRAGE")
+    log.info("="*50)
+    log.info(f"📺 Durée affichage: {DISPLAY_DURATION}s")
+    log.info(f"📉 Seuil absence progressive: {ABSENT_THRESHOLD} dBm")
+    log.info(f"🚨 Seuil absence immédiate: {VERY_WEAK_THRESHOLD} dBm")
+    log.info(f"📊 Détections requises pour absence progressive: {ABSENT_REQUIRED}")
+    log.info(f"⭐ Exception Amira (10129): OUVERTURE SYSTÉMATIQUE")
+    log.info(f"📁 Logs: {LOG_FILE}")
+    
+    # Initialiser la BDD
+    init_db()
+    
+    # Nettoyer l'ancien fichier d'affichage
+    try:
+        if os.path.exists(DISPLAY_FILE):
+            os.remove(DISPLAY_FILE)
+            log.info("🧹 Ancien fichier d'affichage nettoyé")
+    except Exception as e:
+        log.error(f"❌ Erreur nettoyage: {e}")
+    
+    # Connexion MQTT
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    client.on_connect = on_connect
+    client.on_message = on_message
+    
+    try:
+        log.info(f"🔄 Connexion à MQTT ({MQTT_HOST}:{MQTT_PORT})...")
+        client.connect(MQTT_HOST, MQTT_PORT, 60)
+        log.info("✅ En attente des messages...")
+        client.loop_forever()
+    except Exception as e:
+        log.error(f"❌ Erreur de connexion MQTT: {e}")
+        log.exception("Détails de l'erreur:")
