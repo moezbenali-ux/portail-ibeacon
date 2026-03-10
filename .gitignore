@@ -1,9 +1,11 @@
-# Fichiers temporaires
 *.log
 *.pyc
 __pycache__/
 *.db
 *.db.backup*
+*.bak
+*.backup
+*.bug
 /tmp/
 /venv/
 logs/
