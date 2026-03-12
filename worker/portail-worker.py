@@ -16,9 +16,11 @@ MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
 
-MQTT_DETECTION_TOPIC = os.getenv("MQTT_DETECTION_TOPIC", "parking/beacon/detected")
-MQTT_RELAY_TOPIC     = os.getenv("MQTT_RELAY_TOPIC",     "parking/relay/command")
-MQTT_STATUS_TOPIC    = os.getenv("MQTT_STATUS_TOPIC",    "portail/status")
+MQTT_DETECTION_TOPIC  = os.getenv("MQTT_DETECTION_TOPIC",  "parking/beacon/+")
+MQTT_TOPIC_ENTREE     = os.getenv("MQTT_TOPIC_ENTREE",     "parking/beacon/entree")
+MQTT_TOPIC_SORTIE     = os.getenv("MQTT_TOPIC_SORTIE",     "parking/beacon/sortie")
+MQTT_RELAY_TOPIC      = os.getenv("MQTT_RELAY_TOPIC",      "parking/relay/command")
+MQTT_STATUS_TOPIC     = os.getenv("MQTT_STATUS_TOPIC",     "portail/status")
 
 DISPLAY_FILE = os.getenv("DISPLAY_FILE", "/tmp/current_display.json")
 
@@ -37,11 +39,17 @@ RSSI_ABSENCE_THRESHOLD = int(os.getenv("RSSI_ABSENCE_THRESHOLD", "-80"))
 # Nombre de détections consécutives sous le seuil pour resetter le cooldown
 RSSI_ABSENCE_COUNT     = int(os.getenv("RSSI_ABSENCE_COUNT",     "5"))
 
+# Fenêtre de corrélation entrée/sortie (secondes)
+CORRELATION_WINDOW_SECONDS = int(os.getenv("CORRELATION_WINDOW_SECONDS", "3"))
+
 # Cache mémoire des détections RSSI (pas besoin de persister)
 RECENT_DETECTIONS: dict = {}
 
 # Compteur de détections faibles consécutives par beacon_key (pour reset cooldown)
 WEAK_DETECTION_COUNT: dict = {}
+
+# Cache corrélation : {beacon_key: {"entree": (ts, rssi), "sortie": (ts, rssi)}}
+SIDE_DETECTIONS: dict = {}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -454,6 +462,41 @@ def check_absence_and_reset_cooldown(beacon_key: str, rssi: int):
         WEAK_DETECTION_COUNT[beacon_key] = 0
 
 
+def correlate_sides(beacon_key: str, side: str, rssi: int) -> str:
+    """
+    Enregistre la détection par side (entree/sortie) et détermine
+    quel côté a le RSSI le plus fort dans la fenêtre de corrélation.
+
+    Retourne :
+      "entree"  → la balise est du côté entrée  → ouvrir
+      "sortie"  → la balise est du côté sortie  → elle sort, reset cooldown
+      "unknown" → un seul ESP32 actif, on fait confiance à ce qu'on a
+    """
+    now = time.time()
+
+    if beacon_key not in SIDE_DETECTIONS:
+        SIDE_DETECTIONS[beacon_key] = {}
+
+    SIDE_DETECTIONS[beacon_key][side] = (now, rssi)
+
+    # Nettoyage des détections trop vieilles
+    sides = SIDE_DETECTIONS[beacon_key]
+    sides = {s: (ts, r) for s, (ts, r) in sides.items()
+             if now - ts <= CORRELATION_WINDOW_SECONDS}
+    SIDE_DETECTIONS[beacon_key] = sides
+
+    if "entree" in sides and "sortie" in sides:
+        rssi_entree = sides["entree"][1]
+        rssi_sortie = sides["sortie"][1]
+        logging.info(
+            f"🔀 Corrélation {beacon_key}: entree={rssi_entree} dBm, sortie={rssi_sortie} dBm"
+        )
+        return "entree" if rssi_entree >= rssi_sortie else "sortie"
+
+    # Un seul ESP32 visible → on fait confiance au side reçu
+    return "unknown"
+
+
 # ─── Affichage & ouverture ────────────────────────────────────────────────────
 
 def update_display(name):
@@ -474,7 +517,7 @@ def open_gate(client: mqtt.Client, user: dict, payload: dict):
 
 # ─── Traitement détection ─────────────────────────────────────────────────────
 
-def process_detection(client: mqtt.Client, payload: dict):
+def process_detection(client: mqtt.Client, payload: dict, side: str = "unknown"):
     mark_departures()
 
     uuid  = payload.get("uuid")
@@ -485,7 +528,7 @@ def process_detection(client: mqtt.Client, payload: dict):
     )
     rssi  = normalize_int(payload.get("rssi"))
 
-    logging.info(f"Beacon reçu: mac={mac}, uuid={uuid}, major={major}, minor={minor}, rssi={rssi}")
+    logging.info(f"Beacon reçu [{side}]: mac={mac}, uuid={uuid}, major={major}, minor={minor}, rssi={rssi}")
 
     beacon_key = make_key(uuid=uuid, major=major, minor=minor, mac=mac)
 
@@ -512,7 +555,19 @@ def process_detection(client: mqtt.Client, payload: dict):
         log_gate_event(user, payload, "denied_rssi", "missing_rssi")
         return
 
-    # Vérification absence : reset cooldown si balise éloignée depuis N détections consécutives
+    # ── Corrélation entrée/sortie ──────────────────────────────────────────────
+    dominant_side = correlate_sides(beacon_key, side, rssi)
+
+    if dominant_side == "sortie":
+        # La balise est plus forte côté sortie → l'utilisateur sort → reset cooldown
+        logging.info(f"🚪 {user.get('name')} sort (RSSI sortie dominant) → reset cooldown")
+        cooldown_reset(beacon_key)
+        WEAK_DETECTION_COUNT[beacon_key] = 0
+        log_gate_event(user, payload, "departure", "sortie_dominant")
+        update_presence(user, beacon_key, rssi)
+        return
+
+    # ── Logique entrée (ou un seul ESP32 actif) ────────────────────────────────
     check_absence_and_reset_cooldown(beacon_key, rssi)
 
     is_ok, reason = detection_is_strong_enough(beacon_key, threshold)
@@ -537,8 +592,9 @@ def process_detection(client: mqtt.Client, payload: dict):
 def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         logging.info("✅ Connecté MQTT")
-        client.subscribe(MQTT_DETECTION_TOPIC, qos=1)
-        logging.info(f"📡 Souscription: {MQTT_DETECTION_TOPIC}")
+        client.subscribe(MQTT_TOPIC_ENTREE, qos=1)
+        client.subscribe(MQTT_TOPIC_SORTIE, qos=1)
+        logging.info(f"📡 Souscriptions: {MQTT_TOPIC_ENTREE}, {MQTT_TOPIC_SORTIE}")
         client.publish(
             MQTT_STATUS_TOPIC,
             json.dumps({"status": "online", "ts": int(time.time())}),
@@ -563,7 +619,16 @@ def on_message(client, userdata, msg):
         if not isinstance(payload, dict):
             logging.warning("Payload JSON non objet, ignoré")
             return
-        process_detection(client, payload)
+
+        # Déterminer le side depuis le topic MQTT
+        if msg.topic == MQTT_TOPIC_ENTREE:
+            side = "entree"
+        elif msg.topic == MQTT_TOPIC_SORTIE:
+            side = "sortie"
+        else:
+            side = payload.get("side", "unknown")
+
+        process_detection(client, payload, side=side)
     except json.JSONDecodeError:
         logging.error("Payload JSON invalide")
     except Exception as e:
@@ -576,7 +641,8 @@ def main():
     logging.info("🚀 PORTAIL WORKER")
     logging.info(f"📁 Base de données : {DB_PATH}")
     logging.info(f"📡 MQTT {MQTT_HOST}:{MQTT_PORT}")
-    logging.info(f"📥 Topic détection : {MQTT_DETECTION_TOPIC}")
+    logging.info(f"📥 Topics détection : {MQTT_TOPIC_ENTREE}, {MQTT_TOPIC_SORTIE}")
+    logging.info(f"🔀 Corrélation      : fenêtre {CORRELATION_WINDOW_SECONDS}s")
     logging.info(f"📤 Topic relais    : {MQTT_RELAY_TOPIC}")
     logging.info(f"🔒 Cooldown        : persistant en base (survie redémarrages)")
     logging.info(f"🔄 Reset cooldown  : {RSSI_ABSENCE_COUNT} détections consécutives < {RSSI_ABSENCE_THRESHOLD} dBm")
