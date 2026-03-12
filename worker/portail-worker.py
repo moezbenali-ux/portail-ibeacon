@@ -25,15 +25,23 @@ DISPLAY_FILE = os.getenv("DISPLAY_FILE", "/tmp/current_display.json")
 OPEN_COOLDOWN_SECONDS        = int(os.getenv("OPEN_COOLDOWN_SECONDS",        "10"))
 GLOBAL_OPEN_COOLDOWN_SECONDS = int(os.getenv("GLOBAL_OPEN_COOLDOWN_SECONDS", "2"))
 
-MIN_DETECTIONS_TO_OPEN = int(os.getenv("MIN_DETECTIONS_TO_OPEN", "2"))
-RSSI_WINDOW_SECONDS    = int(os.getenv("RSSI_WINDOW_SECONDS",    "5"))
+MIN_DETECTIONS_TO_OPEN  = int(os.getenv("MIN_DETECTIONS_TO_OPEN",  "2"))
+RSSI_WINDOW_SECONDS     = int(os.getenv("RSSI_WINDOW_SECONDS",     "5"))
 ABSENCE_TIMEOUT_SECONDS = int(os.getenv("ABSENCE_TIMEOUT_SECONDS", "45"))
 
 MQTT_RECONNECT_DELAY_MIN = int(os.getenv("MQTT_RECONNECT_DELAY_MIN", "1"))
 MQTT_RECONNECT_DELAY_MAX = int(os.getenv("MQTT_RECONNECT_DELAY_MAX", "30"))
 
+# Seuil RSSI en dessous duquel on considère la balise éloignée
+RSSI_ABSENCE_THRESHOLD = int(os.getenv("RSSI_ABSENCE_THRESHOLD", "-80"))
+# Nombre de détections consécutives sous le seuil pour resetter le cooldown
+RSSI_ABSENCE_COUNT     = int(os.getenv("RSSI_ABSENCE_COUNT",     "5"))
+
 # Cache mémoire des détections RSSI (pas besoin de persister)
 RECENT_DETECTIONS: dict = {}
+
+# Compteur de détections faibles consécutives par beacon_key (pour reset cooldown)
+WEAK_DETECTION_COUNT: dict = {}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -119,6 +127,25 @@ def cooldown_set(beacon_key: str, ts: float):
         conn.close()
     except Exception as e:
         logging.error(f"cooldown_set error: {e}")
+
+
+def cooldown_reset(beacon_key: str):
+    """Reset le cooldown d'une balise (utilisateur considéré comme parti)."""
+    try:
+        conn = db_connect()
+        cur = conn.cursor()
+        cur.execute("SELECT last_open_ts FROM cooldown_state WHERE beacon_key = ?", (beacon_key,))
+        row = cur.fetchone()
+        if row:
+            conn.execute("DELETE FROM cooldown_state WHERE beacon_key = ?", (beacon_key,))
+            conn.commit()
+            logging.info(
+                f"🔄 Cooldown resetté pour {beacon_key} "
+                f"(balise éloignée depuis {RSSI_ABSENCE_COUNT} détections < {RSSI_ABSENCE_THRESHOLD} dBm)"
+            )
+        conn.close()
+    except Exception as e:
+        logging.error(f"cooldown_reset error: {e}")
 
 
 def should_open(beacon_key: str, cooldown_seconds: int) -> bool:
@@ -408,6 +435,25 @@ def detection_is_strong_enough(beacon_key, threshold):
     return True, f"ok avg={avg_rssi:.1f} max={max_rssi} n={len(rssis)}"
 
 
+def check_absence_and_reset_cooldown(beacon_key: str, rssi: int):
+    """
+    Si la balise émet RSSI_ABSENCE_COUNT détections consécutives sous RSSI_ABSENCE_THRESHOLD,
+    on considère que l'utilisateur est parti et on reset son cooldown.
+    Dès qu'une détection repasse au-dessus du seuil, le compteur repart à zéro.
+    """
+    if rssi < RSSI_ABSENCE_THRESHOLD:
+        WEAK_DETECTION_COUNT[beacon_key] = WEAK_DETECTION_COUNT.get(beacon_key, 0) + 1
+        count = WEAK_DETECTION_COUNT[beacon_key]
+        logging.debug(f"Détection faible {beacon_key}: {count}/{RSSI_ABSENCE_COUNT} (RSSI={rssi})")
+        if count >= RSSI_ABSENCE_COUNT:
+            cooldown_reset(beacon_key)
+            WEAK_DETECTION_COUNT[beacon_key] = 0
+    else:
+        if WEAK_DETECTION_COUNT.get(beacon_key, 0) > 0:
+            logging.debug(f"Compteur absence resetté pour {beacon_key} (RSSI={rssi} >= {RSSI_ABSENCE_THRESHOLD})")
+        WEAK_DETECTION_COUNT[beacon_key] = 0
+
+
 # ─── Affichage & ouverture ────────────────────────────────────────────────────
 
 def update_display(name):
@@ -465,6 +511,9 @@ def process_detection(client: mqtt.Client, payload: dict):
         logging.warning(f"RSSI absent pour {user.get('name')}, ouverture refusée")
         log_gate_event(user, payload, "denied_rssi", "missing_rssi")
         return
+
+    # Vérification absence : reset cooldown si balise éloignée depuis N détections consécutives
+    check_absence_and_reset_cooldown(beacon_key, rssi)
 
     is_ok, reason = detection_is_strong_enough(beacon_key, threshold)
     if not is_ok:
@@ -530,6 +579,7 @@ def main():
     logging.info(f"📥 Topic détection : {MQTT_DETECTION_TOPIC}")
     logging.info(f"📤 Topic relais    : {MQTT_RELAY_TOPIC}")
     logging.info(f"🔒 Cooldown        : persistant en base (survie redémarrages)")
+    logging.info(f"🔄 Reset cooldown  : {RSSI_ABSENCE_COUNT} détections consécutives < {RSSI_ABSENCE_THRESHOLD} dBm")
     logging.info(f"🔒 Fallback minor  : DÉSACTIVÉ")
     logging.info(f"💾 WAL mode        : ACTIVÉ")
     logging.info(f"🔁 Reconnexion     : {MQTT_RECONNECT_DELAY_MIN}s–{MQTT_RECONNECT_DELAY_MAX}s")
