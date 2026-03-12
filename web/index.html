@@ -26,7 +26,6 @@
       color: var(--text);
     }
 
-    /* Horloge temps réel en haut à droite */
     #clock {
       position: fixed;
       top: 18px;
@@ -88,6 +87,48 @@
       font-weight: 700;
       margin-bottom: 20px;
     }
+
+    /* ✅ Badge entrée / sortie */
+    .side-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 20px;
+      border-radius: 999px;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      transition: opacity .3s, background .3s;
+    }
+    .side-badge.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .side-badge.entree {
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+      color: #4ade80;
+    }
+    .side-badge.sortie {
+      background: rgba(251, 146, 60, 0.15);
+      border: 1px solid rgba(251, 146, 60, 0.4);
+      color: #fb923c;
+    }
+    .side-badge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .side-badge.entree .dot { background: #4ade80; }
+    .side-badge.sortie .dot { background: #fb923c; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: .5; transform: scale(1.4); }
+    }
+
     .actions {
       display: flex;
       justify-content: center;
@@ -118,13 +159,19 @@
 </head>
 <body>
 
-  <!-- Horloge temps réel -->
   <div id="clock">--:--:--</div>
 
   <div class="panel">
     <div class="badge">Portail Roole</div>
     <h1>Accès portail</h1>
     <div class="sub">Dernière balise reconnue</div>
+
+    <!-- ✅ Badge entrée / sortie -->
+    <div id="sideBadge" class="side-badge hidden">
+      <span class="dot"></span>
+      <span id="sideLabel"></span>
+    </div>
+
     <div id="currentName" class="current-name waiting">En attente</div>
     <div id="currentTime" class="current-time"></div>
     <div class="actions">
@@ -134,9 +181,9 @@
   </div>
 
   <script>
-    const DISPLAY_DURATION_MS = 60 * 1000; // 1 minute
+    const DISPLAY_DURATION_MS = 60 * 1000;
 
-    // ── Horloge temps réel ──────────────────────────────────────────────────
+    // ── Horloge ─────────────────────────────────────────────────────────────
     function updateClock() {
       const now = new Date();
       const d = now.toLocaleDateString('fr-FR', {
@@ -148,7 +195,7 @@
     updateClock();
     setInterval(updateClock, 1000);
 
-    // ── Affichage nom balise avec expiration 1 minute ───────────────────────
+    // ── Helpers ──────────────────────────────────────────────────────────────
     function formatTs(ts) {
       if (!ts) return '';
       return new Date(ts * 1000).toLocaleString('fr-FR');
@@ -159,15 +206,33 @@
       el.textContent = 'En attente';
       el.classList.add('waiting');
       document.getElementById('currentTime').textContent = '';
+      // Masquer le badge côté
+      const badge = document.getElementById('sideBadge');
+      badge.className = 'side-badge hidden';
     }
 
-    function setName(name, ts) {
+    function setName(name, ts, side) {
+      // Nom
       const el = document.getElementById('currentName');
       el.textContent = name;
       el.classList.remove('waiting');
       document.getElementById('currentTime').textContent = formatTs(ts);
+
+      // ✅ Badge entrée / sortie
+      const badge  = document.getElementById('sideBadge');
+      const label  = document.getElementById('sideLabel');
+      if (side === 'entree') {
+        badge.className = 'side-badge entree';
+        label.textContent = '↓ Entrée';
+      } else if (side === 'sortie') {
+        badge.className = 'side-badge sortie';
+        label.textContent = '↑ Sortie';
+      } else {
+        badge.className = 'side-badge hidden';
+      }
     }
 
+    // ── Polling ──────────────────────────────────────────────────────────────
     async function refreshCurrent() {
       try {
         const response = await fetch('/current');
@@ -176,10 +241,11 @@
 
         const name = data.name || '';
         const ts   = data.timestamp || null;
+        const side = data.side || 'unknown';
         const age  = ts ? (Date.now() / 1000 - ts) : Infinity;
 
         if (name && name !== 'En attente' && age < 60) {
-          setName(name, ts);
+          setName(name, ts, side);
         } else {
           setWaiting();
         }

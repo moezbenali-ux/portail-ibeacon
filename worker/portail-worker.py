@@ -34,21 +34,13 @@ ABSENCE_TIMEOUT_SECONDS = int(os.getenv("ABSENCE_TIMEOUT_SECONDS", "45"))
 MQTT_RECONNECT_DELAY_MIN = int(os.getenv("MQTT_RECONNECT_DELAY_MIN", "1"))
 MQTT_RECONNECT_DELAY_MAX = int(os.getenv("MQTT_RECONNECT_DELAY_MAX", "30"))
 
-# Seuil RSSI en dessous duquel on considère la balise éloignée
 RSSI_ABSENCE_THRESHOLD = int(os.getenv("RSSI_ABSENCE_THRESHOLD", "-80"))
-# Nombre de détections consécutives sous le seuil pour resetter le cooldown
 RSSI_ABSENCE_COUNT     = int(os.getenv("RSSI_ABSENCE_COUNT",     "5"))
 
-# Fenêtre de corrélation entrée/sortie (secondes)
 CORRELATION_WINDOW_SECONDS = int(os.getenv("CORRELATION_WINDOW_SECONDS", "3"))
 
-# Cache mémoire des détections RSSI (pas besoin de persister)
 RECENT_DETECTIONS: dict = {}
-
-# Compteur de détections faibles consécutives par beacon_key (pour reset cooldown)
 WEAK_DETECTION_COUNT: dict = {}
-
-# Cache corrélation : {beacon_key: {"entree": (ts, rssi), "sortie": (ts, rssi)}}
 SIDE_DETECTIONS: dict = {}
 
 logging.basicConfig(
@@ -101,7 +93,6 @@ def db_connect():
 # ─── Cooldown persistant en base ──────────────────────────────────────────────
 
 def cooldown_get(beacon_key: str) -> float:
-    """Retourne le timestamp de la dernière ouverture pour cette clé (0 si jamais ouverte)."""
     try:
         conn = db_connect()
         cur = conn.cursor()
@@ -118,7 +109,6 @@ def cooldown_get(beacon_key: str) -> float:
 
 
 def cooldown_set(beacon_key: str, ts: float):
-    """Enregistre le timestamp d'ouverture pour cette clé."""
     try:
         conn = db_connect()
         conn.execute(
@@ -138,7 +128,6 @@ def cooldown_set(beacon_key: str, ts: float):
 
 
 def cooldown_reset(beacon_key: str):
-    """Reset le cooldown d'une balise (utilisateur considéré comme parti)."""
     try:
         conn = db_connect()
         cur = conn.cursor()
@@ -159,21 +148,18 @@ def cooldown_reset(beacon_key: str):
 def should_open(beacon_key: str, cooldown_seconds: int) -> bool:
     now = time.time()
 
-    # Cooldown global (anti-rebond multi-beacon)
     last_global = cooldown_get("__global__")
     if now - last_global < GLOBAL_OPEN_COOLDOWN_SECONDS:
         remaining = round(GLOBAL_OPEN_COOLDOWN_SECONDS - (now - last_global), 1)
         logging.info(f"Cooldown global actif ({remaining}s restantes)")
         return False
 
-    # Cooldown par beacon
     last = cooldown_get(beacon_key)
     if now - last < cooldown_seconds:
         remaining = round(cooldown_seconds - (now - last), 1)
         logging.info(f"Cooldown actif pour {beacon_key} ({remaining}s restantes)")
         return False
 
-    # Enregistrement en base — survie aux redémarrages
     cooldown_set(beacon_key, now)
     cooldown_set("__global__", now)
     return True
@@ -182,16 +168,11 @@ def should_open(beacon_key: str, cooldown_seconds: int) -> bool:
 # ─── Recherche utilisateur ────────────────────────────────────────────────────
 
 def get_user_from_beacon(uuid=None, major=None, minor=None, mac=None):
-    """
-    Recherche par major+minor (priorité), puis par MAC.
-    L'UUID est ignoré — le major+minor suffit à identifier la balise.
-    """
     conn = None
     try:
         conn = db_connect()
         cur = conn.cursor()
 
-        # Priorité 1 : major + minor
         if major is not None and minor is not None:
             cur.execute(
                 """SELECT id, minor, name, email, active, rssi_threshold, uuid, major, mac
@@ -202,7 +183,6 @@ def get_user_from_beacon(uuid=None, major=None, minor=None, mac=None):
             if row:
                 return dict(row)
 
-        # Priorité 2 : MAC (fallback)
         mac = normalize_mac(mac)
         if mac:
             cur.execute(
@@ -444,11 +424,6 @@ def detection_is_strong_enough(beacon_key, threshold):
 
 
 def check_absence_and_reset_cooldown(beacon_key: str, rssi: int):
-    """
-    Si la balise émet RSSI_ABSENCE_COUNT détections consécutives sous RSSI_ABSENCE_THRESHOLD,
-    on considère que l'utilisateur est parti et on reset son cooldown.
-    Dès qu'une détection repasse au-dessus du seuil, le compteur repart à zéro.
-    """
     if rssi < RSSI_ABSENCE_THRESHOLD:
         WEAK_DETECTION_COUNT[beacon_key] = WEAK_DETECTION_COUNT.get(beacon_key, 0) + 1
         count = WEAK_DETECTION_COUNT[beacon_key]
@@ -463,15 +438,6 @@ def check_absence_and_reset_cooldown(beacon_key: str, rssi: int):
 
 
 def correlate_sides(beacon_key: str, side: str, rssi: int) -> str:
-    """
-    Enregistre la détection par side (entree/sortie) et détermine
-    quel côté a le RSSI le plus fort dans la fenêtre de corrélation.
-
-    Retourne :
-      "entree"  → la balise est du côté entrée  → ouvrir
-      "sortie"  → la balise est du côté sortie  → elle sort, reset cooldown
-      "unknown" → un seul ESP32 actif, on fait confiance à ce qu'on a
-    """
     now = time.time()
 
     if beacon_key not in SIDE_DETECTIONS:
@@ -479,7 +445,6 @@ def correlate_sides(beacon_key: str, side: str, rssi: int) -> str:
 
     SIDE_DETECTIONS[beacon_key][side] = (now, rssi)
 
-    # Nettoyage des détections trop vieilles
     sides = SIDE_DETECTIONS[beacon_key]
     sides = {s: (ts, r) for s, (ts, r) in sides.items()
              if now - ts <= CORRELATION_WINDOW_SECONDS}
@@ -493,18 +458,21 @@ def correlate_sides(beacon_key: str, side: str, rssi: int) -> str:
         )
         return "entree" if rssi_entree >= rssi_sortie else "sortie"
 
-    # Un seul ESP32 visible → on fait confiance au side reçu
     return "unknown"
 
 
 # ─── Affichage & ouverture ────────────────────────────────────────────────────
 
-def update_display(name):
+def update_display(name, side="unknown"):  # ✅ AJOUT: paramètre side
     try:
-        data = {"name": name, "timestamp": int(time.time())}
+        data = {
+            "name": name,
+            "side": side,              # ✅ "entree", "sortie", ou "unknown"
+            "timestamp": int(time.time())
+        }
         with open(DISPLAY_FILE, "w") as f:
             json.dump(data, f)
-        logging.info(f"📺 Affichage mis à jour: {name}")
+        logging.info(f"📺 Affichage mis à jour: {name} [{side}]")
     except Exception as e:
         logging.error(f"Erreur update_display: {e}")
 
@@ -559,7 +527,6 @@ def process_detection(client: mqtt.Client, payload: dict, side: str = "unknown")
     dominant_side = correlate_sides(beacon_key, side, rssi)
 
     if dominant_side == "sortie":
-        # La balise est plus forte côté sortie → l'utilisateur sort → reset cooldown
         logging.info(f"🚪 {user.get('name')} sort (RSSI sortie dominant) → reset cooldown")
         cooldown_reset(beacon_key)
         WEAK_DETECTION_COUNT[beacon_key] = 0
@@ -583,7 +550,9 @@ def process_detection(client: mqtt.Client, payload: dict, side: str = "unknown")
         log_gate_event(user, payload, "cooldown", "cooldown_active")
         return
 
-    update_display(user.get("name"))
+    # ✅ MODIFIÉ: passer le side dominant à update_display
+    display_side = dominant_side if dominant_side != "unknown" else side
+    update_display(user.get("name"), side=display_side)
     open_gate(client, user, payload)
 
 
@@ -620,7 +589,6 @@ def on_message(client, userdata, msg):
             logging.warning("Payload JSON non objet, ignoré")
             return
 
-        # Déterminer le side depuis le topic MQTT
         if msg.topic == MQTT_TOPIC_ENTREE:
             side = "entree"
         elif msg.topic == MQTT_TOPIC_SORTIE:

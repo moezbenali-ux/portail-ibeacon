@@ -60,12 +60,11 @@ def api_display():
     try:
         if not os.path.exists(DISPLAY_FILE):
             return jsonify({"name": "En attente", "timestamp": None})
-
         with open(DISPLAY_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-
         return jsonify({
             "name": data.get("name", "En attente"),
+            "side": data.get("side", "unknown"),
             "timestamp": data.get("timestamp")
         })
     except Exception as e:
@@ -74,7 +73,6 @@ def api_display():
             "name": "En attente",
             "timestamp": None
         }), 500
-
 
 @app.route("/current")
 def current():
@@ -647,6 +645,36 @@ def api_presence():
 
     return jsonify(rows)
 
+# ─── OTA Firmware ─────────────────────────────────────────────────────────────
+
+OTA_DIR = os.path.join(BASE_DIR, "ota")
+
+@app.route("/ota/<filename>")
+def ota_firmware(filename):
+    """Sert les fichiers firmware .bin pour l'OTA ESP32."""
+    if not filename.endswith(".bin"):
+        return jsonify({"error": "Fichier non autorisé"}), 403
+    if not os.path.exists(os.path.join(OTA_DIR, filename)):
+        return jsonify({"error": "Firmware introuvable"}), 404
+    return send_from_directory(OTA_DIR, filename, mimetype="application/octet-stream")
+
+
+@app.route("/api/ota/status")
+def api_ota_status():
+    """Liste les firmwares disponibles dans le dossier OTA."""
+    if not os.path.exists(OTA_DIR):
+        return jsonify([])
+    files = []
+    for f in os.listdir(OTA_DIR):
+        if f.endswith(".bin"):
+            path = os.path.join(OTA_DIR, f)
+            files.append({
+                "filename": f,
+                "size": os.path.getsize(path),
+                "modified": int(os.path.getmtime(path))
+            })
+    return jsonify(files)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+

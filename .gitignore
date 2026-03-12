@@ -13,3 +13,4 @@ __pycache__/
 *.fix-*
 *.pre-update*
 web/index.html.bak*
+web/ota/
