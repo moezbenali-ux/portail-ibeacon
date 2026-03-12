@@ -1,383 +1,652 @@
 #!/usr/bin/env python3
-from flask import Flask, render_template_string, jsonify, request, send_from_directory
+# -*- coding: utf-8 -*-
+
 import json
 import os
-import time
 import sqlite3
-import re
-import random
+from flask import Flask, jsonify, request, send_from_directory
 
-app = Flask(__name__)
-
-# Fichiers
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.expanduser("~/portail/data/users.db")
 DISPLAY_FILE = "/tmp/current_display.json"
-DB_PATH = "/home/administrateur/portail/data/users.db"
-LOG_FILE = "/home/administrateur/portail/logs/portail.log"
 
-# Page d'affichage public (écran 27")
-HTML_PUBLIC = """
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Portail Parking</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #0f172a;
-      color: white;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      text-align: center;
-    }
+app = Flask(__name__, static_folder=BASE_DIR, static_url_path="")
 
-    #clock {
-      position: absolute;
-      top: 30px;
-      right: 40px;
-      font-size: 32px;
-      font-weight: bold;
-    }
 
-    #message {
-      font-size: 64px;
-      font-weight: bold;
-      padding: 20px 40px;
-    }
-  </style>
-</head>
-<body>
-  <div id="clock"></div>
-  <div id="message">En attente...</div>
+def db_connect():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    # WAL mode : lectures simultanées sans bloquer les écritures du worker
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    return conn
 
-  <script>
-    let lastCustomMessageAt = 0;
 
-    function updateClock() {
-      const now = new Date();
-      const date = now.toLocaleDateString('fr-FR', {
-        weekday: 'long',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      });
-      const time = now.toLocaleTimeString('fr-FR');
-      document.getElementById('clock').textContent = date + ' ' + time;
-    }
-
-    async function refreshMessage() {
-      try {
-        const res = await fetch('/current');
-        const data = await res.json();
-
-        const messageEl = document.getElementById('message');
-        const nowMs = Date.now();
-
-        if (data.message && data.message !== 'En attente...') {
-          lastCustomMessageAt = nowMs;
-          messageEl.textContent = data.message;
-        } else {
-          if (nowMs - lastCustomMessageAt > 30000) {
-            messageEl.textContent = 'En attente...';
-          }
-        }
-      } catch (e) {
-        console.error('Erreur récupération message:', e);
-      }
-    }
-
-    updateClock();
-    setInterval(updateClock, 1000);
-
-    refreshMessage();
-    setInterval(refreshMessage, 2000);
-
-    setInterval(() => {
-      const messageEl = document.getElementById('message');
-      const nowMs = Date.now();
-      if (nowMs - lastCustomMessageAt > 30000) {
-        messageEl.textContent = 'En attente...';
-      }
-    }, 1000);
-  </script>
-</body>
-</html>
-"""
-
-# ==================== ROUTES PAGES ====================
-
-@app.route('/')
+@app.route("/")
 def index():
-    return HTML_PUBLIC
+    if os.path.exists(os.path.join(BASE_DIR, "index.html")):
+        return send_from_directory(BASE_DIR, "index.html")
+    return "index.html introuvable", 404
 
-@app.route('/admin.html')
-def admin():
-    return send_from_directory('.', 'admin.html')
 
-@app.route('/radar.html')
+@app.route("/admin")
+def admin_page():
+    if os.path.exists(os.path.join(BASE_DIR, "admin.html")):
+        return send_from_directory(BASE_DIR, "admin.html")
+    return "admin.html introuvable", 404
+
+
+@app.route("/radar.html")
 def radar():
-    return send_from_directory('.', 'radar.html')
+    if os.path.exists(os.path.join(BASE_DIR, "radar.html")):
+        return send_from_directory(BASE_DIR, "radar.html")
+    return "radar.html introuvable", 404
 
-@app.route('/scan_beacons.html')
+
+@app.route("/scan_beacons.html")
 def scan_beacons():
-    return send_from_directory('.', 'scan_beacons.html')
+    if os.path.exists(os.path.join(BASE_DIR, "scan_beacons.html")):
+        return send_from_directory(BASE_DIR, "scan_beacons.html")
+    return "scan_beacons.html introuvable", 404
 
-@app.route('/<path:filename>')
-def serve_static(filename):
-    if '..' in filename or filename.startswith('/'):
-        return "Not found", 404
-    static_dir = os.path.dirname(os.path.abspath(__file__))
-    filepath = os.path.join(static_dir, filename)
-    if os.path.isfile(filepath):
-        return send_from_directory(static_dir, filename)
-    return "Not found", 404
 
-@app.route('/current')
+@app.route("/api/health")
+def api_health():
+    return jsonify({"ok": True})
+
+
+@app.route("/api/display")
+def api_display():
+    try:
+        if not os.path.exists(DISPLAY_FILE):
+            return jsonify({"name": "En attente", "timestamp": None})
+
+        with open(DISPLAY_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        return jsonify({
+            "name": data.get("name", "En attente"),
+            "timestamp": data.get("timestamp")
+        })
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "name": "En attente",
+            "timestamp": None
+        }), 500
+
+
+@app.route("/current")
 def current():
-    try:
-        if os.path.exists(DISPLAY_FILE):
-            with open(DISPLAY_FILE, 'r') as f:
-                data = json.load(f)
-            if time.time() - data.get('timestamp', 0) < 60:
-                return jsonify({
-                    "message": f"Bienvenue {data['name']}",
-                    "timestamp": data['timestamp']
-                })
-    except:
-        pass
-    return jsonify({"message": "En attente..."})
+    return api_display()
 
-# ==================== ROUTES API UTILISATEURS ====================
 
-@app.route('/api/users', methods=['GET'])
-def api_get_users():
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT minor, name, email, rssi_threshold, active, uuid, major FROM users ORDER BY minor")
-        users = []
-        for row in c.fetchall():
-            users.append({
-                'minor': row[0],
-                'name': row[1],
-                'email': row[2],
-                'rssi_threshold': row[3],
-                'active': bool(row[4]),
-                'uuid': row[5],
-                'major': row[6]
-            })
+@app.route("/api/users")
+def api_users():
+    conn = db_connect()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            id,
+            name,
+            email,
+            active,
+            rssi_threshold,
+            uuid,
+            major,
+            minor,
+            mac
+        FROM users
+        ORDER BY name COLLATE NOCASE ASC
+    """)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return jsonify(rows)
+
+
+@app.route("/api/users", methods=["POST"])
+def api_create_user():
+    data = request.get_json(silent=True) or {}
+
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip() or None
+    active = int(data.get("active", 1))
+    rssi_threshold = int(data.get("rssi_threshold", -70))
+    uuid = (data.get("uuid") or "").strip() or None
+    major = data.get("major")
+    minor = data.get("minor")
+    mac = (data.get("mac") or "").strip() or None
+
+    if major == "":
+        major = None
+    if minor == "":
+        minor = None
+
+    if not name:
+        return jsonify({"error": "name obligatoire"}), 400
+
+    conn = db_connect()
+    cur = conn.cursor()
+
+    if mac:
+        cur.execute("""
+            SELECT id, name
+            FROM users
+            WHERE UPPER(mac) = UPPER(?)
+        """, (mac,))
+        row = cur.fetchone()
+        if row:
+            conn.close()
+            return jsonify({"error": f"MAC déjà utilisée par {row['name']} (id={row['id']})"}), 409
+
+    if uuid and major is not None and minor is not None:
+        cur.execute("""
+            SELECT id, name
+            FROM users
+            WHERE uuid = ? AND major = ? AND minor = ?
+        """, (uuid, major, minor))
+        row = cur.fetchone()
+        if row:
+            conn.close()
+            return jsonify({"error": f"Triplet beacon déjà utilisé par {row['name']} (id={row['id']})"}), 409
+
+    cur.execute("""
+        INSERT INTO users (name, email, active, rssi_threshold, uuid, major, minor, mac)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (name, email, active, rssi_threshold, uuid, major, minor, mac))
+
+    conn.commit()
+    user_id = cur.lastrowid
+    conn.close()
+
+    return jsonify({"ok": True, "id": user_id})
+
+
+@app.route("/api/users/<int:user_id>")
+def api_user(user_id):
+    conn = db_connect()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            id,
+            name,
+            email,
+            active,
+            rssi_threshold,
+            uuid,
+            major,
+            minor,
+            mac
+        FROM users
+        WHERE id = ?
+    """, (user_id,))
+    row = cur.fetchone()
+    conn.close()
+
+    if not row:
+        return jsonify({"error": "utilisateur introuvable"}), 404
+
+    return jsonify(dict(row))
+
+
+@app.route("/api/users/<int:user_id>", methods=["POST", "PUT"])
+def api_update_user(user_id):
+    data = request.get_json(silent=True) or {}
+
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip() or None
+    active = int(data.get("active", 1))
+    rssi_threshold = int(data.get("rssi_threshold", -70))
+    uuid = (data.get("uuid") or "").strip() or None
+    major = data.get("major")
+    minor = data.get("minor")
+    mac = (data.get("mac") or "").strip() or None
+
+    if major == "":
+        major = None
+    if minor == "":
+        minor = None
+
+    if not name:
+        return jsonify({"error": "name obligatoire"}), 400
+
+    conn = db_connect()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+    if not cur.fetchone():
         conn.close()
-        return jsonify(users)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": "utilisateur introuvable"}), 404
 
-@app.route('/api/users', methods=['POST'])
-def api_add_user():
-    try:
-        data = request.json
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT minor FROM users WHERE minor = ?", (data['minor'],))
-        if c.fetchone():
-            return jsonify({'error': 'Ce minor existe déjà'}), 400
-        c.execute("""
-            INSERT INTO users (minor, name, email, rssi_threshold, active, uuid, major)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            data['minor'],
-            data['name'],
-            data.get('email', ''),
-            data.get('rssi_threshold', -70),
-            data.get('active', 1),
-            data.get('uuid', None),
-            data.get('major', None)
-        ))
-        conn.commit()
+    if mac:
+        cur.execute("""
+            SELECT id, name
+            FROM users
+            WHERE UPPER(mac) = UPPER(?)
+              AND id <> ?
+        """, (mac, user_id))
+        row = cur.fetchone()
+        if row:
+            conn.close()
+            return jsonify({"error": f"MAC déjà utilisée par {row['name']} (id={row['id']})"}), 409
+
+    if uuid and major is not None and minor is not None:
+        cur.execute("""
+            SELECT id, name
+            FROM users
+            WHERE uuid = ? AND major = ? AND minor = ?
+              AND id <> ?
+        """, (uuid, major, minor, user_id))
+        row = cur.fetchone()
+        if row:
+            conn.close()
+            return jsonify({"error": f"Triplet beacon déjà utilisé par {row['name']} (id={row['id']})"}), 409
+
+    cur.execute("""
+        UPDATE users
+        SET name = ?,
+            email = ?,
+            active = ?,
+            rssi_threshold = ?,
+            uuid = ?,
+            major = ?,
+            minor = ?,
+            mac = ?
+        WHERE id = ?
+    """, (name, email, active, rssi_threshold, uuid, major, minor, mac, user_id))
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({"ok": True, "id": user_id})
+
+
+@app.route("/api/users/<int:user_id>", methods=["DELETE"])
+def api_delete_user(user_id):
+    conn = db_connect()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id, name FROM users WHERE id = ?", (user_id,))
+    row = cur.fetchone()
+    if not row:
         conn.close()
-        return jsonify({'status': 'ok'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": "utilisateur introuvable"}), 404
 
-@app.route('/api/users/<int:minor>', methods=['PUT'])
-def api_update_user(minor):
-    try:
-        data = request.json
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        updates = []
-        values = []
-        if 'name' in data:
-            updates.append("name = ?")
-            values.append(data['name'])
-        if 'email' in data:
-            updates.append("email = ?")
-            values.append(data['email'])
-        if 'rssi_threshold' in data:
-            updates.append("rssi_threshold = ?")
-            values.append(data['rssi_threshold'])
-        if 'active' in data:
-            updates.append("active = ?")
-            values.append(1 if data['active'] else 0)
-        if 'uuid' in data:
-            updates.append("uuid = ?")
-            values.append(data['uuid'])
-        if 'major' in data:
-            updates.append("major = ?")
-            values.append(data['major'])
-        if updates:
-            query = f"UPDATE users SET {', '.join(updates)} WHERE minor = ?"
-            values.append(minor)
-            c.execute(query, values)
-            conn.commit()
-        conn.close()
-        return jsonify({'status': 'ok'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    cur.execute("DELETE FROM presence_state WHERE user_id = ?", (user_id,))
+    cur.execute("UPDATE unknown_beacons SET assigned_user_id = NULL WHERE assigned_user_id = ?", (user_id,))
+    cur.execute("DELETE FROM users WHERE id = ?", (user_id,))
 
-@app.route('/api/users/<int:minor>', methods=['DELETE'])
-def api_delete_user(minor):
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("DELETE FROM users WHERE minor = ?", (minor,))
-        conn.commit()
-        conn.close()
-        return jsonify({'status': 'ok'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    conn.commit()
+    conn.close()
 
-# ==================== ROUTES API CONFIG ====================
-
-@app.route('/api/config', methods=['GET'])
-def api_get_config():
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)')
-        defaults = {'global_rssi_threshold': '-70', 'display_duration': '60'}
-        for key, val in defaults.items():
-            c.execute('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)', (key, val))
-        conn.commit()
-        c.execute("SELECT key, value FROM config")
-        config = {row[0]: row[1] for row in c.fetchall()}
-        conn.close()
-        return jsonify(config)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/config', methods=['POST'])
-def api_save_config():
-    try:
-        data = request.json
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)')
-        for key, value in data.items():
-            c.execute('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)', (key, str(value)))
-        conn.commit()
-        conn.close()
-        return jsonify({'status': 'ok'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# ==================== ROUTE API POUR LE SCAN ====================
-
-@app.route('/api/beacons/recent')
-def api_recent_beacons():
-    try:
-        # Récupérer les utilisateurs autorisés
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT uuid, major, minor, name FROM users")
-        users = {}
-        for row in c.fetchall():
-            users[row[2]] = {'uuid': row[0], 'major': row[1], 'name': row[3]}
-        conn.close()
-        
-        beacons = []
-        seen_minors = set()
-        
-        # Lire les logs récents
-        if os.path.exists(LOG_FILE):
-            with open(LOG_FILE, 'r') as f:
-                lines = f.readlines()[-1000:]  # 1000 dernières lignes
-                
-                for line in reversed(lines):
-                    # Chercher les lignes de détection
-                    if "Minor:" in line and "RSSI:" in line:
-                        # Extraire UUID si présent
-                        uuid_match = re.search(r'UUID: ([0-9a-f-]+)', line)
-                        major_match = re.search(r'Major: (\d+)', line)
-                        minor_match = re.search(r'Minor: (\d+)', line)
-                        rssi_match = re.search(r'RSSI: (-?\d+)', line)
-                        
-                        if minor_match and rssi_match:
-                            minor = int(minor_match.group(1))
-                            rssi = int(rssi_match.group(1))
-                            
-                            # Éviter les doublons (garder le plus récent)
-                            if minor not in seen_minors:
-                                seen_minors.add(minor)
-                                
-                                uuid = uuid_match.group(1) if uuid_match else None
-                                major = int(major_match.group(1)) if major_match else None
-                                
-                                if minor in users:
-                                    # Balise autorisée
-                                    beacons.append({
-                                        'minor': minor,
-                                        'uuid': users[minor]['uuid'],
-                                        'major': users[minor]['major'],
-                                        'rssi': rssi,
-                                        'authorized': True,
-                                        'name': users[minor]['name']
-                                    })
-                                else:
-                                    # Balise inconnue - on garde les valeurs détectées
-                                    beacons.append({
-                                        'minor': minor,
-                                        'uuid': uuid,
-                                        'major': major,
-                                        'rssi': rssi,
-                                        'authorized': False,
-                                        'name': f"Inconnu {minor}"
-                                    })
-        
-        # Si pas de logs, données de démonstration avec les utilisateurs connus
-        if not beacons:
-            for minor, data in users.items():
-                beacons.append({
-                    'minor': minor,
-                    'uuid': data['uuid'],
-                    'major': data['major'],
-                    'rssi': random.randint(-85, -45),
-                    'authorized': True,
-                    'name': data['name']
-                })
-        
-        return jsonify(beacons)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# ==================== SANTÉ ====================
-
-@app.route('/health')
-def health():
     return jsonify({
-        'status': 'ok',
-        'time': time.time(),
-        'db': os.path.exists(DB_PATH),
-        'log': os.path.exists(LOG_FILE)
+        "ok": True,
+        "deleted_id": user_id,
+        "deleted_name": row["name"]
     })
 
-if __name__ == '__main__':
-    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
-    print(f"🚀 Serveur web démarré sur port 5000")
-    print(f"📁 Base de données: {DB_PATH}")
-    print(f"📁 Fichier logs: {LOG_FILE}")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+
+@app.route("/api/users/check-duplicates", methods=["POST"])
+def api_check_duplicates():
+    data = request.get_json(silent=True) or {}
+
+    user_id = data.get("id")
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+    mac = (data.get("mac") or "").strip()
+    uuid = (data.get("uuid") or "").strip()
+    major = data.get("major")
+    minor = data.get("minor")
+
+    conn = db_connect()
+    cur = conn.cursor()
+
+    duplicates = {
+        "name": [],
+        "email": [],
+        "mac": [],
+        "triplet": []
+    }
+
+    if name:
+        if user_id:
+            cur.execute("""
+                SELECT id, name, email
+                FROM users
+                WHERE UPPER(name) = UPPER(?)
+                  AND id <> ?
+            """, (name, user_id))
+        else:
+            cur.execute("""
+                SELECT id, name, email
+                FROM users
+                WHERE UPPER(name) = UPPER(?)
+            """, (name,))
+        duplicates["name"] = [dict(r) for r in cur.fetchall()]
+
+    if email:
+        if user_id:
+            cur.execute("""
+                SELECT id, name, email
+                FROM users
+                WHERE UPPER(email) = UPPER(?)
+                  AND id <> ?
+            """, (email, user_id))
+        else:
+            cur.execute("""
+                SELECT id, name, email
+                FROM users
+                WHERE UPPER(email) = UPPER(?)
+            """, (email,))
+        duplicates["email"] = [dict(r) for r in cur.fetchall()]
+
+    if mac:
+        if user_id:
+            cur.execute("""
+                SELECT id, name, mac
+                FROM users
+                WHERE UPPER(mac) = UPPER(?)
+                  AND id <> ?
+            """, (mac, user_id))
+        else:
+            cur.execute("""
+                SELECT id, name, mac
+                FROM users
+                WHERE UPPER(mac) = UPPER(?)
+            """, (mac,))
+        duplicates["mac"] = [dict(r) for r in cur.fetchall()]
+
+    if uuid and major is not None and minor is not None:
+        if user_id:
+            cur.execute("""
+                SELECT id, name, uuid, major, minor
+                FROM users
+                WHERE uuid = ?
+                  AND major = ?
+                  AND minor = ?
+                  AND id <> ?
+            """, (uuid, major, minor, user_id))
+        else:
+            cur.execute("""
+                SELECT id, name, uuid, major, minor
+                FROM users
+                WHERE uuid = ?
+                  AND major = ?
+                  AND minor = ?
+            """, (uuid, major, minor))
+        duplicates["triplet"] = [dict(r) for r in cur.fetchall()]
+
+    conn.close()
+
+    blocking = bool(duplicates["mac"] or duplicates["triplet"])
+
+    return jsonify({
+        "duplicates": duplicates,
+        "blocking": blocking
+    })
+
+
+@app.route("/api/unknown-beacons")
+def api_unknown_beacons():
+    conn = db_connect()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            id,
+            datetime(first_seen) AS first_seen,
+            datetime(last_seen) AS last_seen,
+            uuid,
+            major,
+            minor,
+            mac,
+            last_rssi,
+            seen_count,
+            assigned_user_id,
+            notes
+        FROM unknown_beacons
+        WHERE assigned_user_id IS NULL
+        ORDER BY last_seen DESC
+        LIMIT 100
+    """)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return jsonify(rows)
+
+
+@app.route("/api/unknown-beacons/<int:beacon_id>")
+def api_unknown_beacon(beacon_id):
+    conn = db_connect()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            id,
+            datetime(first_seen) AS first_seen,
+            datetime(last_seen) AS last_seen,
+            uuid,
+            major,
+            minor,
+            mac,
+            last_rssi,
+            seen_count,
+            assigned_user_id,
+            notes
+        FROM unknown_beacons
+        WHERE id = ?
+    """, (beacon_id,))
+    row = cur.fetchone()
+    conn.close()
+
+    if not row:
+        return jsonify({"error": "balise introuvable"}), 404
+
+    return jsonify(dict(row))
+
+
+@app.route("/api/unknown-beacons/<int:beacon_id>/assign", methods=["POST"])
+def api_assign_unknown_beacon(beacon_id):
+    data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
+
+    if not user_id:
+        return jsonify({"error": "user_id manquant"}), 400
+
+    conn = db_connect()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT id, uuid, major, minor, mac
+        FROM unknown_beacons
+        WHERE id = ?
+    """, (beacon_id,))
+    beacon = cur.fetchone()
+
+    if not beacon:
+        conn.close()
+        return jsonify({"error": "balise inconnue introuvable"}), 404
+
+    cur.execute("""
+        SELECT id, name
+        FROM users
+        WHERE id = ?
+    """, (user_id,))
+    user = cur.fetchone()
+
+    if not user:
+        conn.close()
+        return jsonify({"error": "utilisateur introuvable"}), 404
+
+    uuid = beacon["uuid"]
+    major = beacon["major"]
+    minor = beacon["minor"]
+    mac = beacon["mac"]
+
+    if uuid is not None and major is not None and minor is not None:
+        cur.execute("""
+            UPDATE users
+            SET uuid = NULL, major = NULL, minor = NULL
+            WHERE id <> ?
+              AND uuid = ?
+              AND major = ?
+              AND minor = ?
+        """, (user_id, uuid, major, minor))
+
+    if mac:
+        cur.execute("""
+            UPDATE users
+            SET mac = NULL
+            WHERE id <> ?
+              AND UPPER(mac) = UPPER(?)
+        """, (user_id, mac))
+
+    cur.execute("""
+        UPDATE users
+        SET uuid = ?, major = ?, minor = ?, mac = COALESCE(?, mac)
+        WHERE id = ?
+    """, (uuid, major, minor, mac, user_id))
+
+    cur.execute("""
+        UPDATE unknown_beacons
+        SET assigned_user_id = ?
+        WHERE id = ?
+    """, (user_id, beacon_id))
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "ok": True,
+        "beacon_id": beacon_id,
+        "user_id": user_id
+    })
+
+
+@app.route("/api/beacons/recent")
+def api_beacons_recent():
+    conn = db_connect()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            ub.id,
+            datetime(ub.last_seen) AS last_seen,
+            ub.uuid,
+            ub.major,
+            ub.minor,
+            ub.mac,
+            ub.last_rssi,
+            ub.seen_count,
+            u.id AS user_id,
+            u.name AS user_name,
+            u.active AS user_active
+        FROM unknown_beacons ub
+        LEFT JOIN users u
+          ON (
+                (ub.uuid IS NOT NULL AND ub.uuid = u.uuid AND ub.major = u.major AND ub.minor = u.minor)
+             OR (ub.mac IS NOT NULL AND UPPER(ub.mac) = UPPER(u.mac))
+             OR (ub.minor IS NOT NULL AND ub.minor = u.minor)
+          )
+        ORDER BY ub.last_seen DESC
+        LIMIT 100
+    """)
+
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return jsonify(rows)
+
+
+@app.route("/api/stats")
+def api_stats():
+    conn = db_connect()
+    cur = conn.cursor()
+
+    cur.execute("SELECT COUNT(*) AS c FROM users WHERE active = 1")
+    active_users = cur.fetchone()["c"]
+
+    cur.execute("""
+        SELECT COUNT(*) AS c
+        FROM unknown_beacons
+        WHERE assigned_user_id IS NULL
+    """)
+    unknown_beacons = cur.fetchone()["c"]
+
+    cur.execute("""
+        SELECT COUNT(*) AS c
+        FROM gate_events
+        WHERE date(ts) = date('now')
+    """)
+    events_today = cur.fetchone()["c"]
+
+    cur.execute("""
+        SELECT COUNT(*) AS c
+        FROM gate_events
+        WHERE event_type = 'open'
+          AND date(ts) = date('now')
+    """)
+    opens_today = cur.fetchone()["c"]
+
+    conn.close()
+
+    return jsonify({
+        "active_users": active_users,
+        "unknown_beacons": unknown_beacons,
+        "events_today": events_today,
+        "opens_today": opens_today
+    })
+
+
+@app.route("/api/gate-events")
+def api_gate_events():
+    limit = request.args.get("limit", default=50, type=int)
+    limit = max(1, min(limit, 500))
+
+    conn = db_connect()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            id,
+            datetime(ts) AS ts,
+            user_id,
+            user_name,
+            uuid,
+            major,
+            minor,
+            mac,
+            rssi,
+            event_type,
+            reason
+        FROM gate_events
+        ORDER BY id DESC
+        LIMIT ?
+    """, (limit,))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+
+    return jsonify(rows)
+
+
+@app.route("/api/presence")
+def api_presence():
+    conn = db_connect()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            p.user_id,
+            u.name,
+            p.beacon_key,
+            p.status,
+            p.last_seen,
+            p.last_rssi,
+            p.entered_at,
+            p.exited_at
+        FROM presence_state p
+        LEFT JOIN users u ON u.id = p.user_id
+        ORDER BY u.name COLLATE NOCASE ASC
+    """)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+
+    return jsonify(rows)
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=False)

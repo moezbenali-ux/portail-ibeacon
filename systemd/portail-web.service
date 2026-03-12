@@ -1,13 +1,20 @@
 [Unit]
-Description=Portail Web Display
+Description=Portail Web Display (Gunicorn)
 After=network.target
 
 [Service]
 Type=simple
 User=administrateur
 WorkingDirectory=/home/administrateur/portail/web
-ExecStart=/home/administrateur/portail/venv/bin/python /home/administrateur/portail/web/app.py
+ExecStart=/home/administrateur/portail/venv/bin/gunicorn \
+    --workers 2 \
+    --bind 0.0.0.0:5000 \
+    --timeout 30 \
+    --access-logfile /home/administrateur/portail/logs/gunicorn-access.log \
+    --error-logfile /home/administrateur/portail/logs/gunicorn-error.log \
+    app:app
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

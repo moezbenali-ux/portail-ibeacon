@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portail</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121a2b;
+      --text: #eaf1ff;
+      --muted: #9fb0d0;
+      --line: #28334d;
+      --accent: #4f8cff;
+      --shadow: 0 12px 28px rgba(0,0,0,.28);
+      --radius: 24px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top, #162544 0%, #0b1020 55%);
+      font-family: Inter, Arial, sans-serif;
+      color: var(--text);
+    }
+
+    /* Horloge temps réel en haut à droite */
+    #clock {
+      position: fixed;
+      top: 18px;
+      right: 28px;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.03em;
+      background: rgba(18,26,43,.82);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 6px 16px;
+      backdrop-filter: blur(6px);
+    }
+
+    .panel {
+      width: min(900px, 92vw);
+      background: rgba(18,26,43,.96);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 36px;
+      text-align: center;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 40px;
+    }
+    .sub {
+      color: var(--muted);
+      margin-bottom: 28px;
+      font-size: 18px;
+    }
+    .current-name {
+      font-size: 54px;
+      font-weight: 800;
+      margin: 28px 0 12px;
+      line-height: 1.05;
+      transition: opacity .4s;
+    }
+    .current-name.waiting {
+      color: var(--muted);
+      font-size: 38px;
+      font-weight: 400;
+    }
+    .current-time {
+      color: var(--muted);
+      font-size: 16px;
+      margin-bottom: 28px;
+      min-height: 22px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 10px 16px;
+      border-radius: 999px;
+      background: #24314f;
+      border: 1px solid var(--line);
+      color: var(--text);
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+    .actions {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 24px;
+    }
+    .btn {
+      text-decoration: none;
+      color: white;
+      background: var(--accent);
+      padding: 12px 18px;
+      border-radius: 14px;
+      font-weight: 700;
+      box-shadow: var(--shadow);
+    }
+    .btn.secondary {
+      background: #24314f;
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+    @media (max-width: 700px) {
+      .current-name { font-size: 34px; }
+      .current-name.waiting { font-size: 26px; }
+      #clock { font-size: 13px; padding: 5px 12px; right: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Horloge temps réel -->
+  <div id="clock">--:--:--</div>
+
+  <div class="panel">
+    <div class="badge">Portail Roole</div>
+    <h1>Accès portail</h1>
+    <div class="sub">Dernière balise reconnue</div>
+    <div id="currentName" class="current-name waiting">En attente</div>
+    <div id="currentTime" class="current-time"></div>
+    <div class="actions">
+      <a class="btn secondary" href="/radar.html">Radar</a>
+      <a class="btn secondary" href="/admin">Administration</a>
+    </div>
+  </div>
+
+  <script>
+    const DISPLAY_DURATION_MS = 60 * 1000; // 1 minute
+
+    // ── Horloge temps réel ──────────────────────────────────────────────────
+    function updateClock() {
+      const now = new Date();
+      const d = now.toLocaleDateString('fr-FR', {
+        weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric'
+      });
+      const t = now.toLocaleTimeString('fr-FR');
+      document.getElementById('clock').textContent = `${d}  ${t}`;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // ── Affichage nom balise avec expiration 1 minute ───────────────────────
+    function formatTs(ts) {
+      if (!ts) return '';
+      return new Date(ts * 1000).toLocaleString('fr-FR');
+    }
+
+    function setWaiting() {
+      const el = document.getElementById('currentName');
+      el.textContent = 'En attente';
+      el.classList.add('waiting');
+      document.getElementById('currentTime').textContent = '';
+    }
+
+    function setName(name, ts) {
+      const el = document.getElementById('currentName');
+      el.textContent = name;
+      el.classList.remove('waiting');
+      document.getElementById('currentTime').textContent = formatTs(ts);
+    }
+
+    async function refreshCurrent() {
+      try {
+        const response = await fetch('/current');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+
+        const name = data.name || '';
+        const ts   = data.timestamp || null;
+        const age  = ts ? (Date.now() / 1000 - ts) : Infinity;
+
+        if (name && name !== 'En attente' && age < 60) {
+          setName(name, ts);
+        } else {
+          setWaiting();
+        }
+      } catch (err) {
+        setWaiting();
+        console.error(err);
+      }
+    }
+
+    refreshCurrent();
+    setInterval(refreshCurrent, 2000);
+  </script>
+</body>
+</html>

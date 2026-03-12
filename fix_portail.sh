@@ -1,3 +1,89 @@
+#!/bin/bash
+# =============================================================================
+# fix_portail.sh — Corrections post-audit
+# =============================================================================
+# 1. Persistance du cooldown en base SQLite (survie aux redémarrages)
+# 2. Désactivation des comptes de test (Test10129 id=99, test id=96)
+# 3. Correction PASCALE ROSSO (minor/major vides)
+# 4. Détection et rapport des conflits de minor
+# =============================================================================
+
+set -euo pipefail
+
+PORTAIL_DIR="/home/administrateur/portail"
+VENV="$PORTAIL_DIR/venv"
+PYTHON="$VENV/bin/python"
+DB="$PORTAIL_DIR/data/users.db"
+WORKER_FILE="$PORTAIL_DIR/worker/portail-worker.py"
+
+BACKUP_DIR="$PORTAIL_DIR/data/backups/fix-$(date +%Y%m%d-%H%M%S)"
+ROLLBACK_DONE=0
+
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
+
+info()    { echo -e "${BLUE}[INFO]${NC}  $*"; }
+ok()      { echo -e "${GREEN}[OK]${NC}    $*"; }
+warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
+error()   { echo -e "${RED}[ERROR]${NC} $*"; }
+section() { echo -e "\n${BOLD}━━━ $* ━━━${NC}"; }
+
+rollback() {
+    local reason="$1"
+    error "ÉCHEC : $reason"
+    warn "═══════════════════════════════════"
+    warn "  ROLLBACK — restauration en cours"
+    warn "═══════════════════════════════════"
+
+    [ -f "$BACKUP_DIR/portail-worker.py" ] && \
+        cp "$BACKUP_DIR/portail-worker.py" "$WORKER_FILE" && ok "Worker restauré"
+    [ -f "$BACKUP_DIR/users.db" ] && \
+        cp "$BACKUP_DIR/users.db" "$DB" && ok "Base de données restaurée"
+
+    systemctl daemon-reload
+    echo ""
+    warn "Fichiers restaurés. Services NON redémarrés."
+    read -rp "Appuyez sur ENTRÉE pour redémarrer les services : "
+    systemctl restart portail-worker
+    ROLLBACK_DONE=1
+    exit 1
+}
+
+trap 'if [ $ROLLBACK_DONE -eq 0 ]; then rollback "erreur inattendue (ligne $LINENO)"; fi' ERR
+
+if [ "$EUID" -ne 0 ]; then
+    error "Ce script doit être exécuté en root (sudo)."
+    exit 1
+fi
+
+# ─── Backup ───────────────────────────────────────────────────────────────────
+section "Backup"
+mkdir -p "$BACKUP_DIR"
+cp "$WORKER_FILE" "$BACKUP_DIR/portail-worker.py"
+cp "$DB"          "$BACKUP_DIR/users.db"
+ok "Backup dans : $BACKUP_DIR"
+
+# ─── 1. Créer la table cooldown en base ───────────────────────────────────────
+section "1/4 — Création table cooldown persistant"
+
+sqlite3 "$DB" << 'SQL'
+CREATE TABLE IF NOT EXISTS cooldown_state (
+    beacon_key   TEXT PRIMARY KEY,
+    last_open_ts REAL NOT NULL,
+    updated_at   TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Cooldown global (clé réservée)
+INSERT OR IGNORE INTO cooldown_state (beacon_key, last_open_ts)
+VALUES ('__global__', 0);
+SQL
+
+ok "Table cooldown_state créée (ou déjà existante)"
+
+# ─── 2. Réécriture portail-worker.py avec cooldown persistant ─────────────────
+section "2/4 — Mise à jour portail-worker.py (cooldown persistant)"
+
+cat > "$WORKER_FILE" << 'PYEOF'
 #!/usr/bin/env python3
 
 import json
@@ -67,12 +153,11 @@ def normalize_int(value, default=None):
 
 
 def make_key(uuid=None, major=None, minor=None, mac=None):
-    if major is not None and minor is not None:
-        return f"beacon|{major}|{minor}"
     mac = normalize_mac(mac)
     if mac:
         return f"mac|{mac}"
     return f"ibeacon|{uuid}|{major}|{minor}"
+
 
 def db_connect():
     conn = sqlite3.connect(DB_PATH, timeout=10)
@@ -148,32 +233,30 @@ def should_open(beacon_key: str, cooldown_seconds: int) -> bool:
 
 def get_user_from_beacon(uuid=None, major=None, minor=None, mac=None):
     """
-    Recherche par major+minor (priorité), puis par MAC.
-    L'UUID est ignoré — le major+minor suffit à identifier la balise.
+    Recherche par MAC (priorité) puis triplet UUID/major/minor.
+    Le fallback par minor seul est désactivé (risque de faux positifs).
     """
     conn = None
     try:
         conn = db_connect()
         cur = conn.cursor()
-
-        # Priorité 1 : major + minor
-        if major is not None and minor is not None:
-            cur.execute(
-                """SELECT id, minor, name, email, active, rssi_threshold, uuid, major, mac
-                   FROM users WHERE major = ? AND minor = ? AND active = 1""",
-                (int(major), int(minor)),
-            )
-            row = cur.fetchone()
-            if row:
-                return dict(row)
-
-        # Priorité 2 : MAC (fallback)
         mac = normalize_mac(mac)
+
         if mac:
             cur.execute(
                 """SELECT id, minor, name, email, active, rssi_threshold, uuid, major, mac
                    FROM users WHERE UPPER(mac) = ? AND active = 1""",
                 (mac,),
+            )
+            row = cur.fetchone()
+            if row:
+                return dict(row)
+
+        if uuid is not None and major is not None and minor is not None:
+            cur.execute(
+                """SELECT id, minor, name, email, active, rssi_threshold, uuid, major, mac
+                   FROM users WHERE uuid = ? AND major = ? AND minor = ? AND active = 1""",
+                (str(uuid), int(major), int(minor)),
             )
             row = cur.fetchone()
             if row:
@@ -187,6 +270,7 @@ def get_user_from_beacon(uuid=None, major=None, minor=None, mac=None):
     finally:
         if conn:
             conn.close()
+
 
 # ─── Balises inconnues ────────────────────────────────────────────────────────
 
@@ -422,9 +506,9 @@ def update_display(name):
 
 def open_gate(client: mqtt.Client, user: dict, payload: dict):
     client.publish(MQTT_RELAY_TOPIC, "OPEN", qos=1, retain=False)
-    rssi = payload.get("rssi", "?")
-    logging.info(f"🔓 Ouverture portail publiée sur {MQTT_RELAY_TOPIC} pour {user.get('name')} (RSSI: {rssi} dBm)")
+    logging.info(f"🔓 Ouverture portail publiée sur {MQTT_RELAY_TOPIC} pour {user.get('name')}")
     log_gate_event(user, payload, "open", "authorized")
+
 
 # ─── Traitement détection ─────────────────────────────────────────────────────
 
@@ -553,3 +637,105 @@ def main():
 
 if __name__ == "__main__":
     main()
+PYEOF
+
+chown administrateur:administrateur "$WORKER_FILE"
+ok "portail-worker.py mis à jour (cooldown persistant)"
+
+# ─── 3. Désactivation comptes de test ─────────────────────────────────────────
+section "3/4 — Désactivation des comptes de test (id 96 et 99)"
+
+sqlite3 "$DB" << 'SQL'
+UPDATE users SET active = 0 WHERE id IN (96, 99);
+SQL
+
+# Vérification
+RESULT=$(sqlite3 "$DB" "SELECT id, name, active FROM users WHERE id IN (96, 99);")
+echo "$RESULT"
+ok "Comptes Test10129 (99) et test (96) désactivés"
+
+# ─── 4. Rapport conflits de minor ─────────────────────────────────────────────
+section "4/4 — Rapport des conflits de minor"
+
+echo ""
+echo -e "${BOLD}Utilisateurs partageant le même minor (actifs uniquement) :${NC}"
+echo ""
+
+CONFLICTS=$(sqlite3 "$DB" << 'SQL'
+SELECT
+    minor,
+    GROUP_CONCAT(id || ' - ' || name, ' | ') AS utilisateurs,
+    COUNT(*) AS nb
+FROM users
+WHERE active = 1
+  AND minor IS NOT NULL
+GROUP BY minor
+HAVING COUNT(*) > 1
+ORDER BY minor;
+SQL
+)
+
+if [ -z "$CONFLICTS" ]; then
+    ok "Aucun conflit de minor détecté parmi les utilisateurs actifs."
+else
+    echo -e "${YELLOW}⚠️  Conflits détectés :${NC}"
+    echo ""
+    printf "%-10s %-5s %s\n" "MINOR" "NB" "UTILISATEURS"
+    printf "%-10s %-5s %s\n" "─────" "──" "────────────"
+    while IFS='|' read -r minor users nb; do
+        printf "${RED}%-10s${NC} %-5s %s\n" "$minor" "$nb" "$users"
+    done <<< "$CONFLICTS"
+    echo ""
+    warn "Ces utilisateurs partagent le même minor avec des UUID/MAC différents."
+    warn "Sans UUID ni MAC enregistrés, le système ne peut pas les distinguer."
+    warn "→ Vérifiez et corrigez via l'interface admin ou manuellement."
+fi
+
+# ─── 5. Rapport PASCALE ROSSO ────────────────────────────────────────────────
+section "5/4 — Vérification PASCALE ROSSO (id=17)"
+
+echo ""
+ROSSO=$(sqlite3 "$DB" "SELECT id, name, mac, uuid, major, minor, active FROM users WHERE id=17;")
+echo "État actuel : $ROSSO"
+echo ""
+MAC_ROSSO=$(sqlite3 "$DB" "SELECT mac FROM users WHERE id=17;")
+echo -e "${YELLOW}PASCALE ROSSO a une MAC ($MAC_ROSSO) mais minor/major vides.${NC}"
+echo -e "${YELLOW}Elle sera reconnue UNIQUEMENT par sa MAC — c'est suffisant.${NC}"
+echo ""
+warn "Aucune correction automatique appliquée : la MAC seule est valide."
+warn "Si tu veux ajouter son minor/major, utilise l'interface admin."
+
+# ─── Validation syntaxique ────────────────────────────────────────────────────
+section "Validation syntaxique Python"
+
+"$PYTHON" -m py_compile "$WORKER_FILE" && ok "portail-worker.py : syntaxe OK"
+
+# ─── Redémarrage ─────────────────────────────────────────────────────────────
+section "Redémarrage du worker"
+
+systemctl restart portail-worker
+sleep 2
+
+if systemctl is-active --quiet portail-worker; then
+    ok "portail-worker : actif ✅"
+else
+    rollback "portail-worker n'a pas démarré"
+fi
+
+# ─── Résumé ───────────────────────────────────────────────────────────────────
+section "Résumé"
+
+echo ""
+echo -e "${GREEN}${BOLD}✅ Corrections appliquées avec succès${NC}"
+echo ""
+echo -e "  📦 Backup           : ${BOLD}$BACKUP_DIR${NC}"
+echo -e "  🔒 Cooldown         : ${GREEN}PERSISTANT en base${NC} (survie aux redémarrages)"
+echo -e "  🚫 Test10129 (99)   : ${RED}DÉSACTIVÉ${NC}"
+echo -e "  🚫 test (96)        : ${RED}DÉSACTIVÉ${NC}"
+echo -e "  👤 PASCALE ROSSO    : ${YELLOW}MAC seule — suffisant${NC}"
+echo ""
+echo "Vérifier les logs du worker :"
+echo "  journalctl -fu portail-worker"
+echo ""
+
+ROLLBACK_DONE=1

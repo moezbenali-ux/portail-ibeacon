@@ -1,182 +1,698 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-    <title>Admin Portail</title>
-    <style>
-        body { font-family: Arial; margin: 20px; background: #f5f5f5; }
-        .container { max-width: 1200px; margin: 0 auto; }
-        h1 { color: #333; }
-        .config { background: white; padding: 20px; border-radius: 10px; margin: 20px 0; }
-        table { width: 100%; border-collapse: collapse; background: white; }
-        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background: #667eea; color: white; }
-        input { padding: 5px; width: 80px; }
-        button { padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
-        .delete-btn { background: #dc3545; }
-        .add-form { background: white; padding: 20px; border-radius: 10px; margin: 20px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
-        .success { background: #d4edda; color: #155724; padding: 10px; border-radius: 5px; display: none; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Administration utilisateurs</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121a2b;
+      --panel-2: #18233a;
+      --text: #eaf1ff;
+      --muted: #9fb0d0;
+      --line: #28334d;
+      --accent: #4f8cff;
+      --ok: #1fbf75;
+      --warn: #ffb020;
+      --danger: #ff5d73;
+      --shadow: 0 12px 28px rgba(0,0,0,.28);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: linear-gradient(180deg, #0a1020 0%, #0d1326 100%);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1450px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .topbar h1 {
+      margin: 0;
+      font-size: 30px;
+    }
+
+    .topbar p {
+      margin: 6px 0 0;
+      color: var(--muted);
+    }
+
+    .search {
+      min-width: 320px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 14px;
+      color: var(--text);
+      outline: none;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.95fr;
+      gap: 22px;
+    }
+
+    .card {
+      background: rgba(18,26,43,.96);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .card-header h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .card-header .sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .card-body {
+      padding: 18px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: 72vh;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+      vertical-align: top;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: var(--panel-2);
+      color: var(--muted);
+      z-index: 1;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn, .mini-btn {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+      color: white;
+      background: var(--accent);
+    }
+
+    .mini-btn {
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+
+    .btn.secondary, .mini-btn.secondary {
+      background: #24314f;
+      border: 1px solid var(--line);
+    }
+
+    .btn.danger, .mini-btn.danger {
+      background: #5c2230;
+    }
+
+    .btn.ok, .mini-btn.ok {
+      background: #146c47;
+    }
+
+    .chip {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #24314f;
+      border: 1px solid var(--line);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .chip.ok { color: #bff6d8; }
+    .chip.danger { color: #ffd4db; }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    .muted { color: var(--muted); }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    input, select {
+      background: #0f1729;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      outline: none;
+    }
+
+    .alert {
+      padding: 12px 14px;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      display: none;
+    }
+
+    .alert.warn {
+      background: rgba(255,176,32,.12);
+      border: 1px solid rgba(255,176,32,.25);
+      color: #ffe1a3;
+    }
+
+    .alert.error {
+      background: rgba(255,93,115,.12);
+      border: 1px solid rgba(255,93,115,.25);
+      color: #ffd0d7;
+    }
+
+    .alert.success {
+      background: rgba(31,191,117,.12);
+      border: 1px solid rgba(31,191,117,.25);
+      color: #bff6d8;
+      display: none;
+    }
+
+    .empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 24px;
+    }
+
+    @media (max-width: 1100px) {
+      .grid { grid-template-columns: 1fr; }
+      .form-grid { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>⚙️ Administration Portail</h1>
-
-        <h2>Ajouter un utilisateur</h2>
-        <div class="add-form">
-            <input type="number" id="new_minor" placeholder="Minor (ex: 26049)">
-            <input type="text" id="new_name" placeholder="Nom complet">
-            <input type="email" id="new_email" placeholder="Email">
-            <input type="number" id="new_threshold" placeholder="Seuil RSSI" value="-70">
-            <input type="text" id="new_uuid" placeholder="UUID" value="fda50693-a4e2-4fb1-afcf-c6eb07647825">
-            <input type="number" id="new_major" placeholder="Major" value="10065">
-            <label><input type="checkbox" id="new_active" checked> Actif</label>
-            <button onclick="addUser()">➕ Ajouter</button>
-        </div>
-
-        <h2>Utilisateurs</h2>
-        <table id="users-table">
-            <thead>
-                <tr>
-                    <th>Minor</th>
-                    <th>Nom</th>
-                    <th>Email</th>
-                    <th>UUID</th>
-                    <th>Major</th>
-                    <th>Seuil</th>
-                    <th>Actif</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Rempli par JavaScript -->
-            </tbody>
-        </table>
-
-        <div class="success" id="success-message">Opération réussie</div>
+  <div class="wrap">
+    <div class="topbar">
+      <div>
+        <h1>Administration utilisateurs</h1>
+        <p>Ajout, modification, suppression, recherche et enrôlement des balises inconnues.</p>
+      </div>
+      <input id="searchInput" class="search" placeholder="Rechercher un nom, email, MAC, major, minor..." />
     </div>
 
-    <script>
-        async function loadUsers() {
-            const response = await fetch('/api/users');
-            const users = await response.json();
-            const tbody = document.querySelector('#users-table tbody');
-            tbody.innerHTML = '';
-            users.sort((a, b) => a.minor - b.minor).forEach(user => {
-                const row = tbody.insertRow();
-                row.innerHTML = `
-                    <td>${user.minor}</td>
-                    <td><input type="text" id="name-${user.minor}" value="${user.name.replace(/"/g, '&quot;')}" style="width:150px"></td>
-                    <td><input type="email" id="email-${user.minor}" value="${user.email || ''}" style="width:180px"></td>
-                    <td><input type="text" id="uuid-${user.minor}" value="${user.uuid || ''}" style="width:200px"></td>
-                    <td><input type="number" id="major-${user.minor}" value="${user.major || ''}" style="width:60px"></td>
-                    <td><input type="number" id="threshold-${user.minor}" value="${user.rssi_threshold}" style="width:60px"></td>
-                    <td><input type="checkbox" id="active-${user.minor}" ${user.active ? 'checked' : ''}></td>
-                    <td>
-                        <button onclick="saveUser(${user.minor})">💾 Sauv.</button>
-                        <button class="delete-btn" onclick="deleteUser(${user.minor})">🗑️ Suppr.</button>
-                    </td>
-                `;
-            });
+    <div class="grid">
+      <div class="card">
+        <div class="card-header">
+          <h2>Utilisateurs</h2>
+          <div class="sub">Gestion complète avec recherche instantanée</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nom</th>
+                <th>Email</th>
+                <th>Actif</th>
+                <th>RSSI</th>
+                <th>Beacon</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="usersTable"></tbody>
+          </table>
+          <div id="usersEmpty" class="empty" style="display:none;">Aucun utilisateur trouvé.</div>
+        </div>
+      </div>
+
+      <div style="display:grid; gap:22px;">
+        <div class="card">
+          <div class="card-header">
+            <h2 id="formTitle">Ajouter un utilisateur</h2>
+            <div class="sub">Détection des doublons avant enregistrement</div>
+          </div>
+          <div class="card-body">
+            <div id="dupAlert" class="alert warn"></div>
+            <div id="errAlert" class="alert error"></div>
+            <div id="successAlert" class="alert success"></div>
+
+            <form id="userForm">
+              <input type="hidden" id="userId" />
+
+              <div class="form-grid">
+                <div class="field full">
+                  <label>Nom</label>
+                  <input id="name" required />
+                </div>
+
+                <div class="field full">
+                  <label>Email</label>
+                  <input id="email" type="email" />
+                </div>
+
+                <div class="field">
+                  <label>Actif</label>
+                  <select id="active">
+                    <option value="1">Oui</option>
+                    <option value="0">Non</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label>RSSI threshold</label>
+                  <input id="rssi_threshold" type="number" value="-70" />
+                </div>
+
+                <div class="field full">
+                  <label>UUID</label>
+                  <input id="uuid" />
+                </div>
+
+                <div class="field">
+                  <label>Major</label>
+                  <input id="major" type="number" />
+                </div>
+
+                <div class="field">
+                  <label>Minor</label>
+                  <input id="minor" type="number" />
+                </div>
+
+                <div class="field full">
+                  <label>MAC</label>
+                  <input id="mac" />
+                </div>
+              </div>
+
+              <div class="actions" style="margin-top:14px;">
+                <button type="submit" class="btn ok">Enregistrer</button>
+                <button type="button" class="btn secondary" onclick="resetForm()">Nouveau</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Balises inconnues récentes</h2>
+            <div class="sub">Associe directement une balise à un utilisateur</div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Vue</th>
+                  <th>Balise</th>
+                  <th>RSSI</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="unknownTable"></tbody>
+            </table>
+            <div id="unknownEmpty" class="empty" style="display:none;">Aucune balise inconnue récente.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let allUsers = [];
+    let allUnknown = [];
+
+    function esc(v) {
+      if (v === null || v === undefined) return "";
+      return String(v)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function showErr(msg) {
+      const el = document.getElementById("errAlert");
+      el.style.display = "block";
+      el.textContent = msg;
+    }
+
+    function hideErr() {
+      const el = document.getElementById("errAlert");
+      el.style.display = "none";
+      el.textContent = "";
+    }
+
+    function showDup(msg) {
+      const el = document.getElementById("dupAlert");
+      el.style.display = "block";
+      el.innerHTML = msg;
+    }
+
+    function hideDup() {
+      const el = document.getElementById("dupAlert");
+      el.style.display = "none";
+      el.innerHTML = "";
+    }
+
+    function showSuccess(msg) {
+      const el = document.getElementById("successAlert");
+      el.style.display = "block";
+      el.textContent = msg;
+      setTimeout(() => {
+        el.style.display = "none";
+        el.textContent = "";
+      }, 2500);
+    }
+
+    function resetForm() {
+      document.getElementById("formTitle").textContent = "Ajouter un utilisateur";
+      document.getElementById("userId").value = "";
+      document.getElementById("name").value = "";
+      document.getElementById("email").value = "";
+      document.getElementById("active").value = "1";
+      document.getElementById("rssi_threshold").value = "-70";
+      document.getElementById("uuid").value = "";
+      document.getElementById("major").value = "";
+      document.getElementById("minor").value = "";
+      document.getElementById("mac").value = "";
+      hideErr();
+      hideDup();
+    }
+
+    function fillForm(u) {
+      document.getElementById("formTitle").textContent = `Modifier #${u.id}`;
+      document.getElementById("userId").value = u.id || "";
+      document.getElementById("name").value = u.name || "";
+      document.getElementById("email").value = u.email || "";
+      document.getElementById("active").value = String(u.active ?? 1);
+      document.getElementById("rssi_threshold").value = u.rssi_threshold ?? -70;
+      document.getElementById("uuid").value = u.uuid || "";
+      document.getElementById("major").value = u.major ?? "";
+      document.getElementById("minor").value = u.minor ?? "";
+      document.getElementById("mac").value = u.mac || "";
+      hideErr();
+      hideDup();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function fillFormById(id) {
+      const u = allUsers.find(x => Number(x.id) === Number(id));
+      if (!u) return;
+      fillForm(u);
+    }
+
+    function formData() {
+      return {
+        id: document.getElementById("userId").value || null,
+        name: document.getElementById("name").value.trim(),
+        email: document.getElementById("email").value.trim(),
+        active: Number(document.getElementById("active").value),
+        rssi_threshold: Number(document.getElementById("rssi_threshold").value || -70),
+        uuid: document.getElementById("uuid").value.trim(),
+        major: document.getElementById("major").value ? Number(document.getElementById("major").value) : null,
+        minor: document.getElementById("minor").value ? Number(document.getElementById("minor").value) : null,
+        mac: document.getElementById("mac").value.trim()
+      };
+    }
+
+    async function checkDuplicates(payload) {
+      const r = await fetch("/api/users/check-duplicates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      return await r.json();
+    }
+
+    function renderDuplicateMessage(d) {
+      const lines = [];
+
+      if (d.duplicates?.name?.length) {
+        lines.push(`Même nom : ${d.duplicates.name.map(x => `${x.name} (#${x.id})`).join(", ")}`);
+      }
+      if (d.duplicates?.email?.length) {
+        lines.push(`Même email : ${d.duplicates.email.map(x => `${x.name} (#${x.id})`).join(", ")}`);
+      }
+      if (d.duplicates?.mac?.length) {
+        lines.push(`MAC déjà utilisée : ${d.duplicates.mac.map(x => `${x.name} (#${x.id})`).join(", ")}`);
+      }
+      if (d.duplicates?.triplet?.length) {
+        lines.push(`Triplet beacon déjà utilisé : ${d.duplicates.triplet.map(x => `${x.name} (#${x.id})`).join(", ")}`);
+      }
+
+      return lines.join("<br>");
+    }
+
+    async function saveUser(ev) {
+      ev.preventDefault();
+      hideErr();
+      hideDup();
+
+      const payload = formData();
+      if (!payload.name) {
+        showErr("Le nom est obligatoire.");
+        return;
+      }
+
+      const dup = await checkDuplicates(payload);
+      const dupMsg = renderDuplicateMessage(dup);
+      if (dupMsg) {
+        showDup(dupMsg);
+      }
+      if (dup.blocking) {
+        showErr("Enregistrement bloqué à cause d’un doublon technique.");
+        return;
+      }
+
+      const isEdit = !!payload.id;
+      const url = isEdit ? `/api/users/${payload.id}` : "/api/users";
+      const method = "POST";
+
+      try {
+        const r = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await r.json();
+
+        if (!r.ok) {
+          showErr(data.error || "Erreur d'enregistrement");
+          return;
         }
 
-        async function saveUser(minor) {
-            const name = document.getElementById(`name-${minor}`).value;
-            const email = document.getElementById(`email-${minor}`).value;
-            const uuid = document.getElementById(`uuid-${minor}`).value;
-            const major = document.getElementById(`major-${minor}`).value;
-            const threshold = document.getElementById(`threshold-${minor}`).value;
-            const active = document.getElementById(`active-${minor}`).checked;
+        showSuccess(isEdit ? "Utilisateur modifié" : "Utilisateur ajouté");
+        resetForm();
+        await loadAll();
+      } catch (err) {
+        showErr("Erreur réseau ou backend.");
+      }
+    }
 
-            const response = await fetch('/api/users/' + minor, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    name: name,
-                    email: email,
-                    uuid: uuid || null,
-                    major: major ? parseInt(major) : null,
-                    rssi_threshold: parseInt(threshold),
-                    active: active ? 1 : 0
-                })
-            });
+    async function deleteUser(id, name) {
+      if (!confirm(`Supprimer l'utilisateur "${name}" ?`)) return;
 
-            if (response.ok) {
-                document.getElementById('success-message').style.display = 'block';
-                document.getElementById('success-message').innerText = 'Utilisateur modifié';
-                setTimeout(() => {
-                    document.getElementById('success-message').style.display = 'none';
-                }, 3000);
-                loadUsers();
-            }
+      try {
+        const r = await fetch(`/api/users/${id}`, { method: "DELETE" });
+        const data = await r.json();
+
+        if (!r.ok) {
+          alert(data.error || "Erreur de suppression");
+          return;
         }
 
-        async function deleteUser(minor) {
-            if (!confirm(`Supprimer l'utilisateur ${minor} ?`)) return;
-            
-            const response = await fetch('/api/users/' + minor, {
-                method: 'DELETE'
-            });
+        showSuccess(`Utilisateur supprimé : ${name}`);
+        await loadAll();
+        resetForm();
+      } catch (err) {
+        alert("Erreur réseau ou backend");
+      }
+    }
 
-            if (response.ok) {
-                document.getElementById('success-message').style.display = 'block';
-                document.getElementById('success-message').innerText = 'Utilisateur supprimé';
-                setTimeout(() => {
-                    document.getElementById('success-message').style.display = 'none';
-                }, 3000);
-                loadUsers();
-            }
+    async function enrollBeacon(beaconId) {
+      const beacon = allUnknown.find(x => Number(x.id) === Number(beaconId));
+      if (!beacon) return;
+
+      const input = prompt(
+        `Associer cette balise à quel ID utilisateur ?\n\nUUID: ${beacon.uuid || "-"}\nMajor: ${beacon.major ?? "-"}\nMinor: ${beacon.minor ?? "-"}\nMAC: ${beacon.mac || "Non remontée"}`
+      );
+      if (!input) return;
+
+      const userId = Number(input);
+      if (!userId) {
+        alert("ID invalide");
+        return;
+      }
+
+      try {
+        const r = await fetch(`/api/unknown-beacons/${beaconId}/assign`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId })
+        });
+
+        const data = await r.json();
+        if (!r.ok) {
+          alert(data.error || "Erreur d'association");
+          return;
         }
 
-        async function addUser() {
-            const minor = document.getElementById('new_minor').value;
-            const name = document.getElementById('new_name').value;
-            const email = document.getElementById('new_email').value;
-            const uuid = document.getElementById('new_uuid').value;
-            const major = document.getElementById('new_major').value;
-            const threshold = document.getElementById('new_threshold').value;
-            const active = document.getElementById('new_active').checked;
+        showSuccess(`Balise enrôlée sur utilisateur #${userId}`);
+        await loadAll();
+      } catch (err) {
+        alert("Erreur réseau ou backend");
+      }
+    }
 
-            if (!minor || !name) {
-                alert('Minor et Nom sont obligatoires');
-                return;
-            }
+    function renderUsers() {
+      const q = document.getElementById("searchInput").value.trim().toLowerCase();
+      const rows = allUsers.filter(u => {
+        if (!q) return true;
+        return [
+          u.id, u.name, u.email, u.mac, u.uuid, u.major, u.minor
+        ].join(" ").toLowerCase().includes(q);
+      });
 
-            const response = await fetch('/api/users', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    minor: parseInt(minor),
-                    name: name,
-                    email: email,
-                    uuid: uuid || null,
-                    major: major ? parseInt(major) : null,
-                    rssi_threshold: parseInt(threshold),
-                    active: active ? 1 : 0
-                })
-            });
+      const tbody = document.getElementById("usersTable");
+      const empty = document.getElementById("usersEmpty");
 
-            if (response.ok) {
-                document.getElementById('new_minor').value = '';
-                document.getElementById('new_name').value = '';
-                document.getElementById('new_email').value = '';
-                document.getElementById('new_uuid').value = 'fda50693-a4e2-4fb1-afcf-c6eb07647825';
-                document.getElementById('new_major').value = '10065';
-                document.getElementById('new_threshold').value = '-70';
-                document.getElementById('new_active').checked = true;
-                
-                document.getElementById('success-message').style.display = 'block';
-                document.getElementById('success-message').innerText = 'Utilisateur ajouté';
-                setTimeout(() => {
-                    document.getElementById('success-message').style.display = 'none';
-                }, 3000);
-                loadUsers();
-            } else {
-                const error = await response.json();
-                alert('Erreur: ' + (error.error || 'Inconnue'));
-            }
-        }
+      if (!rows.length) {
+        tbody.innerHTML = "";
+        empty.style.display = "block";
+        return;
+      }
 
-        loadUsers();
-    </script>
+      empty.style.display = "none";
+      tbody.innerHTML = rows.map(u => `
+        <tr>
+          <td>
+            <strong>${esc(u.name)}</strong>
+            <div class="muted">#${u.id}</div>
+          </td>
+          <td>${esc(u.email || "-")}</td>
+          <td>${Number(u.active) === 1 ? '<span class="chip ok">Actif</span>' : '<span class="chip danger">Inactif</span>'}</td>
+          <td>${esc(u.rssi_threshold ?? "-")}</td>
+          <td>
+            <div class="mono">${esc(u.uuid || "-")}</div>
+            <div>major ${esc(u.major ?? "-")} / minor ${esc(u.minor ?? "-")}</div>
+            <div class="mono">${esc(u.mac || "-")}</div>
+          </td>
+          <td>
+            <div class="actions">
+              <button class="mini-btn secondary" onclick="fillFormById(${u.id})">Modifier</button>
+              <button class="mini-btn danger" onclick='deleteUser(${u.id}, ${JSON.stringify(u.name)})'>Supprimer</button>
+            </div>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    function renderUnknown() {
+      const tbody = document.getElementById("unknownTable");
+      const empty = document.getElementById("unknownEmpty");
+
+      if (!allUnknown.length) {
+        tbody.innerHTML = "";
+        empty.style.display = "block";
+        return;
+      }
+
+      empty.style.display = "none";
+      tbody.innerHTML = allUnknown.map(b => `
+        <tr>
+          <td>${esc(b.last_seen || "-")}</td>
+          <td>
+            <div class="mono">${esc(b.uuid || "-")}</div>
+            <div>major ${esc(b.major ?? "-")} / minor ${esc(b.minor ?? "-")}</div>
+            <div class="mono">${esc(b.mac || "Non remontée")}</div>
+          </td>
+          <td>${esc(b.last_rssi ?? "-")}<br><span class="muted">${esc(b.seen_count ?? 0)} vues</span></td>
+          <td>
+            <button class="mini-btn ok" onclick="enrollBeacon(${b.id})">Enrôler</button>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    async function loadUsers() {
+      const r = await fetch("/api/users");
+      allUsers = await r.json();
+      renderUsers();
+    }
+
+    async function loadUnknown() {
+      const r = await fetch("/api/unknown-beacons");
+      allUnknown = await r.json();
+      renderUnknown();
+    }
+
+    async function loadAll() {
+      await Promise.all([loadUsers(), loadUnknown()]);
+    }
+
+    document.getElementById("userForm").addEventListener("submit", saveUser);
+    document.getElementById("searchInput").addEventListener("input", renderUsers);
+
+    loadAll();
+    setInterval(loadUnknown, 15000);
+  </script>
 </body>
 </html>

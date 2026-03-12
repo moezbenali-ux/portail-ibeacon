@@ -1,362 +1,368 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-    <title>Radar des Balises - Portail</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            min-height: 100vh;
-            color: white;
-        }
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-            font-size: 2.5em;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        .radar-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 30px;
-            justify-content: center;
-        }
-        .radar-card {
-            background: rgba(255, 255, 255, 0.15);
-            border-radius: 15px;
-            padding: 20px;
-            width: 400px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-        .radar-title {
-            text-align: center;
-            margin-bottom: 15px;
-            font-size: 1.2em;
-            font-weight: bold;
-        }
-        canvas {
-            width: 100%;
-            height: auto;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 50%;
-        }
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 30px;
-        }
-        .stat-card {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            padding: 15px;
-            text-align: center;
-        }
-        .stat-value {
-            font-size: 2em;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-        .beacon-list {
-            margin-top: 30px;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 10px;
-            padding: 20px;
-        }
-        .beacon-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-        .beacon-minor {
-            font-weight: bold;
-            color: #ffd700;
-        }
-        .beacon-rssi {
-            font-family: monospace;
-            font-size: 1.2em;
-        }
-        .rssi-strong { color: #4caf50; }
-        .rssi-medium { color: #ff9800; }
-        .rssi-weak { color: #f44336; }
-        .refresh-btn {
-            display: block;
-            width: 200px;
-            margin: 20px auto;
-            padding: 15px 30px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-            border-radius: 50px;
-            color: white;
-            font-size: 1.1em;
-            font-weight: bold;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        .refresh-btn:hover {
-            transform: scale(1.05);
-        }
-        .footer {
-            text-align: center;
-            margin-top: 30px;
-            color: rgba(255,255,255,0.7);
-        }
-        .error {
-            background: rgba(244, 67, 54, 0.2);
-            border: 1px solid #f44336;
-            border-radius: 10px;
-            padding: 20px;
-            text-align: center;
-            margin: 20px 0;
-        }
-        .loading {
-            text-align: center;
-            padding: 50px;
-            font-size: 1.2em;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Radar des Balises Bluetooth</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121a2b;
+      --panel-2: #18233a;
+      --text: #eaf1ff;
+      --muted: #9fb0d0;
+      --line: #28334d;
+      --accent: #4f8cff;
+      --ok: #1fbf75;
+      --warn: #ffb020;
+      --danger: #ff5d73;
+      --shadow: 0 12px 28px rgba(0,0,0,.28);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: linear-gradient(180deg, #0a1020 0%, #0d1326 100%);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .title h1 {
+      margin: 0;
+      font-size: 32px;
+    }
+
+    .title p {
+      margin: 8px 0 0;
+      color: var(--muted);
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 16px;
+      font-weight: 700;
+      cursor: pointer;
+      color: white;
+      background: var(--accent);
+      box-shadow: var(--shadow);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn.secondary {
+      background: #24314f;
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    .card {
+      background: rgba(18,26,43,.96);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .stat {
+      padding: 18px;
+    }
+
+    .stat .label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .stat .value {
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    .panel-header {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .panel-header h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .panel-header .sub {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 4px;
+    }
+
+    .panel-body {
+      padding: 18px;
+    }
+
+    .error {
+      margin-bottom: 16px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(255,93,115,.12);
+      color: #ffd4db;
+      border: 1px solid rgba(255,93,115,.25);
+      display: none;
+    }
+
+    .list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    .beacon-card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #141d31;
+      padding: 16px;
+    }
+
+    .beacon-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .beacon-title strong {
+      font-size: 16px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid var(--line);
+      background: #24314f;
+    }
+
+    .chip.ok {
+      color: #bff6d8;
+      border-color: rgba(31,191,117,.35);
+    }
+
+    .chip.warn {
+      color: #ffe2a8;
+      border-color: rgba(255,176,32,.35);
+    }
+
+    .chip.danger {
+      color: #ffd4db;
+      border-color: rgba(255,93,115,.35);
+    }
+
+    .meta {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .meta .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: #d9e6ff;
+      word-break: break-all;
+    }
+
+    .empty {
+      color: var(--muted);
+      text-align: center;
+      padding: 30px;
+    }
+
+    @media (max-width: 900px) {
+      .stats {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
+  <div class="wrap">
+    <div class="topbar">
+      <div class="title">
         <h1>🕸️ Radar des Balises Bluetooth</h1>
-        
-        <div id="error-message" class="error" style="display: none;"></div>
-        <div id="loading-message" class="loading">Chargement des données...</div>
-        
-        <div class="radar-container" id="radar-container">
-            <!-- Les graphiques seront ajoutés ici par JavaScript -->
-        </div>
-
-        <div class="stats">
-            <div class="stat-card">
-                <div>Balises détectées</div>
-                <div class="stat-value" id="total-beacons">0</div>
-            </div>
-            <div class="stat-card">
-                <div>Signal moyen</div>
-                <div class="stat-value" id="avg-rssi">-</div>
-            </div>
-            <div class="stat-card">
-                <div>Balises autorisées</div>
-                <div class="stat-value" id="authorized-beacons">0</div>
-            </div>
-        </div>
-
-        <div class="beacon-list" id="beacon-list">
-            <h3>📡 Balises détectées</h3>
-            <div id="beacons"></div>
-        </div>
-
-        <button class="refresh-btn" onclick="loadData()">🔄 Actualiser</button>
-        <div class="footer">Dernière mise à jour: <span id="last-update">jamais</span></div>
+        <p>Visualisation des balises récemment vues par le système.</p>
+      </div>
+      <div class="actions">
+        <a class="btn secondary" href="/">Accueil</a>
+        <a class="btn secondary" href="/admin">Administration</a>
+        <button class="btn" onclick="loadBeacons()">🔄 Actualiser</button>
+      </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-        let radarCharts = {};
+    <div id="errorMessage" class="error"></div>
 
-        async function loadData() {
-            try {
-                document.getElementById('loading-message').style.display = 'block';
-                document.getElementById('error-message').style.display = 'none';
-                document.getElementById('radar-container').innerHTML = '';
-                
-                const response = await fetch('/api/beacons/recent');
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
-                const beacons = await response.json();
-                
-                document.getElementById('loading-message').style.display = 'none';
-                
-                if (beacons.length === 0) {
-                    document.getElementById('error-message').style.display = 'block';
-                    document.getElementById('error-message').innerHTML = 'Aucune balise détectée récemment';
-                    return;
-                }
-                
-                updateBeaconList(beacons);
-                updateStats(beacons);
-                updateRadarCharts(beacons);
-                
-                document.getElementById('last-update').innerText = new Date().toLocaleTimeString();
-            } catch (error) {
-                console.error('Erreur:', error);
-                document.getElementById('loading-message').style.display = 'none';
-                document.getElementById('error-message').style.display = 'block';
-                document.getElementById('error-message').innerHTML = 'Erreur de chargement: ' + error.message;
-            }
+    <div class="stats">
+      <div class="card stat">
+        <div class="label">Balises détectées</div>
+        <div class="value" id="beaconsCount">0</div>
+      </div>
+      <div class="card stat">
+        <div class="label">Signal moyen</div>
+        <div class="value" id="avgSignal">-</div>
+      </div>
+      <div class="card stat">
+        <div class="label">Balises reconnues</div>
+        <div class="value" id="authorizedCount">0</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="panel-header">
+        <div>
+          <h2>📡 Balises détectées</h2>
+          <div class="sub">Liste des balises récemment vues avec association utilisateur si disponible</div>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div id="beaconsList" class="list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function showError(message) {
+      const el = document.getElementById('errorMessage');
+      el.style.display = 'block';
+      el.textContent = `Erreur de chargement: ${message}`;
+    }
+
+    function hideError() {
+      const el = document.getElementById('errorMessage');
+      el.style.display = 'none';
+      el.textContent = '';
+    }
+
+    function esc(v) {
+      if (v === null || v === undefined) return '-';
+      return String(v)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function rssiChip(rssi) {
+      if (rssi === null || rssi === undefined) {
+        return '<span class="chip">RSSI -</span>';
+      }
+      if (rssi >= -70) {
+        return `<span class="chip ok">${rssi} dBm</span>`;
+      }
+      if (rssi >= -85) {
+        return `<span class="chip warn">${rssi} dBm</span>`;
+      }
+      return `<span class="chip danger">${rssi} dBm</span>`;
+    }
+
+    async function loadBeacons() {
+      try {
+        hideError();
+
+        const response = await fetch('/api/beacons/recent');
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
         }
 
-        function updateBeaconList(beacons) {
-            const container = document.getElementById('beacons');
-            container.innerHTML = '';
-            
-            // Trier par RSSI (signal fort en premier)
-            beacons.sort((a, b) => a.rssi - b.rssi);
-            
-            beacons.forEach(beacon => {
-                const rssiClass = beacon.rssi > -60 ? 'rssi-strong' : (beacon.rssi > -75 ? 'rssi-medium' : 'rssi-weak');
-                
-                const div = document.createElement('div');
-                div.className = 'beacon-item';
-                div.innerHTML = `
-                    <span class="beacon-minor">${beacon.name}</span>
-                    <span>
-                        <span class="beacon-rssi ${rssiClass}">${beacon.rssi} dBm</span>
-                        ${beacon.authorized ? ' ✅' : ' ❌'}
-                    </span>
-                `;
-                container.appendChild(div);
-            });
+        const data = await response.json();
+        const beacons = Array.isArray(data) ? data : (data.beacons || []);
+
+        document.getElementById('beaconsCount').textContent = beacons.length;
+
+        const validRssi = beacons
+          .map(b => b.last_rssi)
+          .filter(v => v !== null && v !== undefined && !Number.isNaN(Number(v)))
+          .map(Number);
+
+        if (validRssi.length > 0) {
+          const avg = validRssi.reduce((a, b) => a + b, 0) / validRssi.length;
+          document.getElementById('avgSignal').textContent = `${avg.toFixed(0)} dBm`;
+        } else {
+          document.getElementById('avgSignal').textContent = '-';
         }
 
-        function updateStats(beacons) {
-            document.getElementById('total-beacons').innerText = beacons.length;
-            
-            const avg = Math.round(beacons.reduce((sum, b) => sum + b.rssi, 0) / beacons.length);
-            document.getElementById('avg-rssi').innerText = avg + ' dBm';
-            
-            const authorized = beacons.filter(b => b.authorized).length;
-            document.getElementById('authorized-beacons').innerText = authorized;
+        const recognized = beacons.filter(b => b.user_id || b.user_name).length;
+        document.getElementById('authorizedCount').textContent = recognized;
+
+        const container = document.getElementById('beaconsList');
+
+        if (!beacons.length) {
+          container.innerHTML = '<div class="empty">Aucune balise détectée récemment.</div>';
+          return;
         }
 
-        function updateRadarCharts(beacons) {
-            const container = document.getElementById('radar-container');
-            container.innerHTML = '';
-            
-            // Grouper par type
-            const authorized = beacons.filter(b => b.authorized);
-            const unknown = beacons.filter(b => !b.authorized);
-            
-            if (authorized.length > 0) {
-                createRadarChart('Balises autorisées', authorized, container);
-            }
-            
-            if (unknown.length > 0) {
-                createRadarChart('Autres balises', unknown, container);
-            }
-        }
+        container.innerHTML = beacons.map(b => `
+          <div class="beacon-card">
+            <div class="beacon-title">
+              <strong>${esc(b.user_name || 'Balise inconnue')}</strong>
+              ${rssiChip(b.last_rssi)}
+            </div>
+            <div class="meta">
+              <div><strong>Dernière vue :</strong> ${esc(b.last_seen)}</div>
+              <div><strong>UUID :</strong> <span class="mono">${esc(b.uuid)}</span></div>
+              <div><strong>Major :</strong> ${esc(b.major)}</div>
+              <div><strong>Minor :</strong> ${esc(b.minor)}</div>
+              <div><strong>MAC :</strong> <span class="mono">${esc(b.mac)}</span></div>
+              <div><strong>Vues :</strong> ${esc(b.seen_count)}</div>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error(err);
+        showError(err.message);
+      }
+    }
 
-        function createRadarChart(title, beacons, container) {
-            // Limiter à 8 balises maximum pour la lisibilité
-            if (beacons.length > 8) {
-                beacons = beacons.slice(0, 8);
-            }
-            
-            const card = document.createElement('div');
-            card.className = 'radar-card';
-            card.innerHTML = `<div class="radar-title">${title} (${beacons.length})</div><canvas></canvas>`;
-            container.appendChild(card);
-            
-            const canvas = card.querySelector('canvas');
-            const ctx = canvas.getContext('2d');
-            
-            // Préparer les données pour le radar
-            const labels = beacons.map(b => {
-                // Tronquer les noms trop longs
-                let name = b.name;
-                if (name.length > 15) {
-                    name = name.substring(0, 12) + '...';
-                }
-                return name;
-            });
-            
-            const rssiData = beacons.map(b => {
-                // Normaliser le RSSI pour le graphique (entre 0 et 100)
-                // RSSI entre -100 et -30
-                return Math.max(0, Math.min(100, ((b.rssi + 100) * 100 / 70)));
-            });
-            
-            // Déterminer la couleur selon le type
-            const color = title.includes('autorisées') ? 
-                'rgba(76, 175, 80, 0.6)' : 'rgba(255, 152, 0, 0.6)';
-            
-            // Détruire l'ancien graphique s'il existe
-            if (radarCharts[title]) {
-                radarCharts[title].destroy();
-            }
-            
-            radarCharts[title] = new Chart(ctx, {
-                type: 'radar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Puissance du signal',
-                        data: rssiData,
-                        backgroundColor: color,
-                        borderColor: color.replace('0.6', '1'),
-                        borderWidth: 2,
-                        pointBackgroundColor: color.replace('0.6', '1'),
-                        pointBorderColor: '#fff',
-                        pointHoverBackgroundColor: '#fff',
-                        pointHoverBorderColor: color.replace('0.6', '1')
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    scales: {
-                        r: {
-                            beginAtZero: true,
-                            max: 100,
-                            min: 0,
-                            ticks: {
-                                stepSize: 20,
-                                callback: (value) => {
-                                    // Convertir en RSSI approximatif
-                                    const rssi = Math.round((value * 70 / 100) - 100);
-                                    return rssi + ' dBm';
-                                },
-                                color: 'rgba(255, 255, 255, 0.7)'
-                            },
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.1)'
-                            },
-                            angleLines: {
-                                color: 'rgba(255, 255, 255, 0.1)'
-                            },
-                            pointLabels: {
-                                color: 'white',
-                                font: {
-                                    size: 11
-                                }
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: (context) => {
-                                    const rssi = Math.round((context.raw * 70 / 100) - 100);
-                                    return `RSSI: ${rssi} dBm`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // Charger les données au démarrage et toutes les 10 secondes
-        loadData();
-        setInterval(loadData, 10000);
-    </script>
+    loadBeacons();
+    setInterval(loadBeacons, 15000);
+  </script>
 </body>
 </html>
