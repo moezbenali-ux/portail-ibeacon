@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Portail</title>
+    <style>
+        body { font-family: Arial; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #333; }
+        .config { background: white; padding: 20px; border-radius: 10px; margin: 20px 0; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #667eea; color: white; }
+        input { padding: 5px; width: 80px; }
+        button { padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .success { background: #d4edda; color: #155724; padding: 10px; border-radius: 5px; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚙️ Administration Portail</h1>
+        
+        <div class="config">
+            <h2>Configuration globale</h2>
+            <label>Seuil RSSI par défaut: <input type="number" id="global_threshold" value="-70"></label>
+            <label>Durée affichage (s): <input type="number" id="display_duration" value="60"></label>
+            <button onclick="saveGlobalConfig()">Sauvegarder</button>
+        </div>
+        
+        <h2>Utilisateurs</h2>
+        <table id="users-table">
+            <thead>
+                <tr>
+                    <th>Minor</th>
+                    <th>Nom</th>
+                    <th>Email</th>
+                    <th>Seuil RSSI</th>
+                    <th>Actif</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Rempli par JavaScript -->
+            </tbody>
+        </table>
+        
+        <div class="success" id="success-message">Configuration sauvegardée</div>
+    </div>
+
+    <script>
+        async function loadUsers() {
+            const response = await fetch('/api/users');
+            const users = await response.json();
+            const tbody = document.querySelector('#users-table tbody');
+            tbody.innerHTML = '';
+            users.forEach(user => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${user.minor}</td>
+                    <td>${user.name}</td>
+                    <td>${user.email || ''}</td>
+                    <td><input type="number" id="threshold-${user.minor}" value="${user.rssi_threshold}"></td>
+                    <td><input type="checkbox" id="active-${user.minor}" ${user.active ? 'checked' : ''}></td>
+                    <td><button onclick="saveUser(${user.minor})">Sauvegarder</button></td>
+                `;
+            });
+        }
+
+        async function saveUser(minor) {
+            const threshold = document.getElementById(`threshold-${minor}`).value;
+            const active = document.getElementById(`active-${minor}`).checked;
+            
+            const response = await fetch('/api/users/' + minor, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({rssi_threshold: threshold, active: active})
+            });
+            
+            if (response.ok) {
+                document.getElementById('success-message').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('success-message').style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        async function saveGlobalConfig() {
+            const globalThreshold = document.getElementById('global_threshold').value;
+            const displayDuration = document.getElementById('display_duration').value;
+            
+            const response = await fetch('/api/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    global_rssi_threshold: globalThreshold,
+                    display_duration: displayDuration
+                })
+            });
+            
+            if (response.ok) {
+                document.getElementById('success-message').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('success-message').style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        loadUsers();
+    </script>
+</body>
+</html>
