@@ -84,18 +84,11 @@ def api_users():
     conn = db_connect()
     cur = conn.cursor()
     cur.execute("""
-        SELECT
-            id,
-            name,
-            email,
-            active,
-            rssi_threshold,
-            uuid,
-            major,
-            minor,
-            mac
-        FROM users
-        ORDER BY name COLLATE NOCASE ASC
+    SELECT DISTINCT u.id, u.name 
+    FROM users u 
+    INNER JOIN access_log a ON a.user_id = u.id 
+    WHERE u.active=1 
+    ORDER BY u.name
     """)
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
@@ -674,6 +667,181 @@ def api_ota_status():
                 "modified": int(os.path.getmtime(path))
             })
     return jsonify(files)
+
+# ── Routes à ajouter dans app.py ──────────────────────────────────────────────
+# Coller ces fonctions dans app.py, avant le if __name__ == '__main__'
+
+@app.route('/insights')
+def insights():
+    return send_from_directory('templates', 'insights.html')
+
+
+@app.route('/api/insights')
+def api_insights():
+    from_date = request.args.get('from', '')
+    to_date   = request.args.get('to', '')
+    user      = request.args.get('user', '')
+    event     = request.args.get('event', '')  # 'entree', 'sortie', ou ''
+
+    try:
+        conn = db_connect()
+        cur  = conn.cursor()
+
+        # ── Construire les sessions entrée/sortie ──────────────────────────────
+        # On joint chaque entrée avec la prochaine sortie du même utilisateur
+        query = """
+            WITH ranked AS (
+                SELECT
+                    id, user_id, name, event, rssi, timestamp,
+                    ROW_NUMBER() OVER (PARTITION BY user_id, event ORDER BY timestamp) AS rn
+                FROM access_log
+                WHERE 1=1
+        """
+        params = []
+
+        if from_date:
+            query += " AND timestamp >= ?"
+            params.append(from_date)
+        if to_date:
+            query += " AND timestamp <= ?"
+            params.append(to_date)
+        if user:
+            query += " AND name = ?"
+            params.append(user)
+
+        query += """
+            ),
+            entrees AS (
+                SELECT id, user_id, name, rssi, timestamp AS entree_time
+                FROM access_log
+                WHERE event = 'entree'
+        """
+
+        params2 = []
+        if from_date:
+            query += ""
+            params2.append(from_date)
+        if to_date:
+            params2.append(to_date)
+        if user:
+            params2.append(user)
+
+        # Requête simplifiée : liste brute avec jointure sortie suivante
+        simple_query = """
+            SELECT
+                e.id,
+                e.name,
+                e.timestamp AS entree_time,
+                e.rssi,
+                (
+                    SELECT s.timestamp
+                    FROM access_log s
+                    WHERE s.user_id = e.user_id
+                      AND s.event = 'sortie'
+                      AND s.timestamp > e.timestamp
+                    ORDER BY s.timestamp ASC
+                    LIMIT 1
+                ) AS sortie_time,
+                ROUND(
+                    (
+                        julianday((
+                            SELECT s2.timestamp
+                            FROM access_log s2
+                            WHERE s2.user_id = e.user_id
+                              AND s2.event = 'sortie'
+                              AND s2.timestamp > e.timestamp
+                            ORDER BY s2.timestamp ASC
+                            LIMIT 1
+                        )) - julianday(e.timestamp)
+                    ) * 1440, 1
+                ) AS duration_min
+            FROM access_log e
+            WHERE e.event = 'entree'
+        """
+        sp = []
+
+        if from_date:
+            simple_query += " AND e.timestamp >= ?"
+            sp.append(from_date)
+        if to_date:
+            simple_query += " AND e.timestamp <= ?"
+            sp.append(to_date)
+        if user:
+            simple_query += " AND e.name = ?"
+            sp.append(user)
+
+        # Si on filtre sur sortie uniquement, requête différente
+        if event == 'sortie':
+            simple_query = """
+                SELECT id, name, NULL AS entree_time, rssi,
+                       timestamp AS sortie_time, NULL AS duration_min
+                FROM access_log
+                WHERE event = 'sortie'
+            """
+            sp = []
+            if from_date:
+                simple_query += " AND timestamp >= ?"
+                sp.append(from_date)
+            if to_date:
+                simple_query += " AND timestamp <= ?"
+                sp.append(to_date)
+            if user:
+                simple_query += " AND name = ?"
+                sp.append(user)
+
+        simple_query += " ORDER BY entree_time DESC"
+
+        cur.execute(simple_query, sp)
+        rows = [dict(r) for r in cur.fetchall()]
+
+        # ── Stats ──────────────────────────────────────────────────────────────
+        stats_query = """
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN event='entree' THEN 1 ELSE 0 END) AS entrees,
+                SUM(CASE WHEN event='sortie' THEN 1 ELSE 0 END) AS sorties,
+                COUNT(DISTINCT user_id) AS users
+            FROM access_log WHERE 1=1
+        """
+        sp2 = []
+        if from_date:
+            stats_query += " AND timestamp >= ?"
+            sp2.append(from_date)
+        if to_date:
+            stats_query += " AND timestamp <= ?"
+            sp2.append(to_date)
+        if user:
+            stats_query += " AND name = ?"
+            sp2.append(user)
+
+        cur.execute(stats_query, sp2)
+        stats = dict(cur.fetchone())
+
+        conn.close()
+        return jsonify({'rows': rows, 'stats': stats})
+
+    except Exception as e:
+        app.logger.error(f"api_insights error: {e}")
+        return jsonify({'error': str(e), 'rows': [], 'stats': {}}), 500
+    except Exception as e:
+        return jsonify({'error': str(e), 'users': []}), 500
+@app.route('/api/insights/users')
+def api_insights_users():
+    try:
+        conn = db_connect()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT u.id, u.name 
+            FROM users u 
+            INNER JOIN access_log a ON a.user_id = u.id 
+            WHERE u.active=1 
+            ORDER BY u.name
+        """)
+        users = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return jsonify({'users': users})
+    except Exception as e:
+        return jsonify({'error': str(e), 'users': []}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)

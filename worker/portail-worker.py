@@ -477,11 +477,31 @@ def update_display(name, side="unknown"):  # ✅ AJOUT: paramètre side
         logging.error(f"Erreur update_display: {e}")
 
 
+def log_access(user: dict, event: str, rssi: int = None):
+    """Insère une ligne dans access_log (event = 'entree' ou 'sortie')."""
+    conn = None
+    try:
+        conn = db_connect()
+        conn.execute(
+            """INSERT INTO access_log (user_id, name, event, rssi)
+               VALUES (?, ?, ?, ?)""",
+            (user["id"], user["name"], event, rssi),
+        )
+        conn.commit()
+        logging.info(f"📋 access_log: {user['name']} → {event} (RSSI: {rssi} dBm)")
+    except Exception as e:
+        logging.error(f"Erreur log_access: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+
 def open_gate(client: mqtt.Client, user: dict, payload: dict):
     client.publish(MQTT_RELAY_TOPIC, "OPEN", qos=1, retain=False)
     rssi = payload.get("rssi", "?")
     logging.info(f"🔓 Ouverture portail publiée sur {MQTT_RELAY_TOPIC} pour {user.get('name')} (RSSI: {rssi} dBm)")
     log_gate_event(user, payload, "open", "authorized")
+    log_access(user, "entree", normalize_int(payload.get("rssi")))
 
 # ─── Traitement détection ─────────────────────────────────────────────────────
 
@@ -531,6 +551,7 @@ def process_detection(client: mqtt.Client, payload: dict, side: str = "unknown")
         cooldown_reset(beacon_key)
         WEAK_DETECTION_COUNT[beacon_key] = 0
         log_gate_event(user, payload, "departure", "sortie_dominant")
+        log_access(user, "sortie", rssi)
         update_presence(user, beacon_key, rssi)
         return
 

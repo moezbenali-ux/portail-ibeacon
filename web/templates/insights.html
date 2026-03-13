@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Insights — Portail</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --surface: #111418;
+    --border: #1e2329;
+    --border-light: #2a3040;
+    --text: #e8eaed;
+    --text-muted: #6b7585;
+    --text-dim: #3a4455;
+    --accent: #4ade80;
+    --accent-dim: rgba(74,222,128,0.08);
+    --accent-border: rgba(74,222,128,0.2);
+    --orange: #fb923c;
+    --orange-dim: rgba(251,146,60,0.08);
+    --blue: #60a5fa;
+    --mono: 'DM Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    font-size: 14px;
+  }
+
+  /* ── Header ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .nav-tabs {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .nav-tab {
+    padding: 6px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-decoration: none;
+    background: transparent;
+    transition: all 0.15s;
+    border-right: 1px solid var(--border);
+  }
+
+  .nav-tab:last-child { border-right: none; }
+
+  .nav-tab:hover { background: var(--surface); color: var(--text); }
+  .nav-tab.active { background: var(--surface); color: var(--accent); }
+
+  /* ── Layout ── */
+  main { padding: 32px; max-width: 1400px; margin: 0 auto; }
+
+  .page-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+
+  /* ── Stats bar ── */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .stat-value.green { color: var(--accent); }
+  .stat-value.orange { color: var(--orange); }
+
+  .stat-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* ── Filters ── */
+  .filters {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-end;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .filter-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  select, input[type="date"], input[type="text"] {
+    background: var(--bg);
+    border: 1px solid var(--border-light);
+    color: var(--text);
+    padding: 7px 12px;
+    border-radius: 5px;
+    font-family: var(--mono);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s;
+    height: 34px;
+  }
+
+  select:focus, input:focus {
+    border-color: var(--accent);
+  }
+
+  select option { background: var(--surface); }
+
+  .btn {
+    height: 34px;
+    padding: 0 16px;
+    border-radius: 5px;
+    border: 1px solid var(--border-light);
+    background: var(--bg);
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn-primary {
+    background: var(--accent-dim);
+    border-color: var(--accent-border);
+    color: var(--accent);
+  }
+
+  .btn-primary:hover { background: rgba(74,222,128,0.15); }
+
+  /* ── Table ── */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .table-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .table-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+  }
+
+  .record-count {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  thead th {
+    padding: 10px 20px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  thead th:hover { color: var(--text); }
+  thead th.sorted { color: var(--accent); }
+
+  thead th .sort-arrow { margin-left: 4px; opacity: 0.5; }
+  thead th.sorted .sort-arrow { opacity: 1; }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+  td {
+    padding: 12px 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    vertical-align: middle;
+  }
+
+  .td-name {
+    font-weight: 500;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+  }
+
+  .td-time {
+    color: var(--text-muted);
+  }
+
+  .td-entree { color: var(--accent); }
+  .td-sortie { color: var(--orange); }
+
+  .td-duration {
+    color: var(--blue);
+  }
+
+  .td-rssi {
+    color: var(--text-muted);
+  }
+
+  .rssi-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .rssi-dots {
+    display: flex;
+    gap: 2px;
+    align-items: flex-end;
+    height: 12px;
+  }
+
+  .rssi-dot {
+    width: 3px;
+    background: var(--text-dim);
+    border-radius: 1px;
+  }
+
+  .rssi-dot.active { background: var(--accent); }
+
+  /* ── Empty state ── */
+  .empty {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .empty-icon { font-size: 32px; margin-bottom: 12px; opacity: 0.3; }
+
+  /* ── Loading ── */
+  .loading {
+    padding: 40px;
+    text-align: center;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid var(--border-light);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Pagination ── */
+  .pagination {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .page-info {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .page-btns { display: flex; gap: 6px; }
+
+  .page-btn {
+    height: 28px;
+    min-width: 28px;
+    padding: 0 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .page-btn:hover { border-color: var(--border-light); color: var(--text); }
+  .page-btn.active { border-color: var(--accent-border); color: var(--accent); background: var(--accent-dim); }
+  .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* ── Period pills ── */
+  .period-pills {
+    display: flex;
+    gap: 4px;
+  }
+
+  .pill {
+    height: 34px;
+    padding: 0 12px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .pill:hover { border-color: var(--border-light); color: var(--text); }
+  .pill.active { border-color: var(--accent-border); color: var(--accent); background: var(--accent-dim); }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .stats-bar { grid-template-columns: repeat(2, 1fr); }
+    main { padding: 16px; }
+    header { padding: 0 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    PORTAIL / INSIGHTS
+  </div>
+  <nav class="nav-tabs">
+    <a href="/" class="nav-tab">Accueil</a>
+    <a href="/admin" class="nav-tab">Admin</a>
+    <a href="/insights" class="nav-tab active">Insights</a>
+  </nav>
+</header>
+
+<main>
+  <div class="page-title">Historique des accès</div>
+
+  <!-- Stats -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-card">
+      <div class="stat-label">Total accès</div>
+      <div class="stat-value" id="statTotal">—</div>
+      <div class="stat-sub" id="statPeriod">sur la période</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Entrées</div>
+      <div class="stat-value green" id="statEntrees">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Sorties</div>
+      <div class="stat-value orange" id="statSorties">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Utilisateurs actifs</div>
+      <div class="stat-value" id="statUsers">—</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters">
+    <div class="filter-group">
+      <div class="filter-label">Période</div>
+      <div class="period-pills">
+        <button class="pill" onclick="setPeriod(1)">1j</button>
+        <button class="pill active" onclick="setPeriod(7)" id="pill7">7j</button>
+        <button class="pill" onclick="setPeriod(30)">30j</button>
+        <button class="pill" onclick="setPeriod(180)">6m</button>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-label">Du</div>
+      <input type="date" id="filterFrom" />
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-label">Au</div>
+      <input type="date" id="filterTo" />
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-label">Utilisateur</div>
+      <input type="text" id="filterUser" list="usersList" placeholder="Rechercher..." style="width:200px">
+      <datalist id="usersList"></datalist>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-label">Événement</div>
+      <select id="filterEvent">
+        <option value="">Tous</option>
+        <option value="entree">Entrée</option>
+        <option value="sortie">Sortie</option>
+      </select>
+    </div>
+
+    <button class="btn btn-primary" onclick="load()">Filtrer</button>
+    <button class="btn" onclick="reset()">Réinitialiser</button>
+    <button class="btn" onclick="exportCSV()" style="margin-left:auto">↓ CSV</button>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <div class="table-header">
+      <div class="table-title">ACCÈS LOG</div>
+      <div class="record-count" id="recordCount"></div>
+    </div>
+
+    <div id="tableBody">
+      <div class="loading"><span class="spinner"></span>Chargement...</div>
+    </div>
+
+    <div class="pagination" id="pagination" style="display:none">
+      <div class="page-info" id="pageInfo"></div>
+      <div class="page-btns" id="pageBtns"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const PER_PAGE = 50;
+let allData = [];
+let filteredData = [];
+let currentPage = 1;
+let sortCol = 'timestamp';
+let sortDir = -1;
+let activePeriod = 7;
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+window.onload = () => {
+  setDefaultDates(7);
+  fetchUsers();
+  load();
+};
+
+function setDefaultDates(days) {
+  const to = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - days);
+  document.getElementById('filterTo').value = fmtDate(to);
+  document.getElementById('filterFrom').value = fmtDate(from);
+}
+
+function fmtDate(d) {
+  return d.toISOString().split('T')[0];
+}
+
+function setPeriod(days) {
+  activePeriod = days;
+  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  setDefaultDates(days);
+  load();
+}
+
+// ── Fetch users for filter ─────────────────────────────────────────────────
+
+async function fetchUsers() {
+  try {
+    const r = await fetch('/api/insights/users');
+    const data = await r.json();
+    const users = Array.isArray(data) ? data : (data.users || []);
+    const dl = document.getElementById('usersList');
+    users.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.name;
+      dl.appendChild(opt);
+    });
+  } catch(e) {}
+}
+
+// ── Load data ─────────────────────────────────────────────────────────────────
+
+async function load() {
+  document.getElementById('tableBody').innerHTML = '<div class="loading"><span class="spinner"></span>Chargement...</div>';
+  document.getElementById('pagination').style.display = 'none';
+
+  const from = document.getElementById('filterFrom').value;
+  const to = document.getElementById('filterTo').value;
+  const user = document.getElementById('filterUser').value;
+  const event = document.getElementById('filterEvent').value;
+
+  const params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to)   params.set('to', to + 'T23:59:59');
+  if (user) params.set('user', user);
+  if (event) params.set('event', event);
+
+  try {
+    const r = await fetch('/api/insights?' + params);
+    const data = await r.json();
+    allData = data.rows || [];
+    updateStats(data.stats || {});
+    applySort();
+  } catch(e) {
+    document.getElementById('tableBody').innerHTML = '<div class="empty"><div class="empty-icon">⚠</div>Erreur de chargement</div>';
+  }
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+function updateStats(stats) {
+  document.getElementById('statTotal').textContent = stats.total ?? '—';
+  document.getElementById('statEntrees').textContent = stats.entrees ?? '—';
+  document.getElementById('statSorties').textContent = stats.sorties ?? '—';
+  document.getElementById('statUsers').textContent = stats.users ?? '—';
+  document.getElementById('statPeriod').textContent =
+    document.getElementById('filterFrom').value + ' → ' + document.getElementById('filterTo').value;
+}
+
+// ── Sort ──────────────────────────────────────────────────────────────────────
+
+function sortBy(col) {
+  if (sortCol === col) sortDir *= -1;
+  else { sortCol = col; sortDir = -1; }
+  applySort();
+}
+
+function applySort() {
+  filteredData = [...allData].sort((a, b) => {
+    let va = a[sortCol] ?? '';
+    let vb = b[sortCol] ?? '';
+    if (typeof va === 'string') return va.localeCompare(vb) * sortDir;
+    return (va - vb) * sortDir;
+  });
+  currentPage = 1;
+  renderTable();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+
+function renderTable() {
+  const total = filteredData.length;
+  document.getElementById('recordCount').textContent = total + ' enregistrement' + (total > 1 ? 's' : '');
+
+  if (total === 0) {
+    document.getElementById('tableBody').innerHTML = '<div class="empty"><div class="empty-icon">◌</div>Aucun accès trouvé</div>';
+    document.getElementById('pagination').style.display = 'none';
+    return;
+  }
+
+  const totalPages = Math.ceil(total / PER_PAGE);
+  const start = (currentPage - 1) * PER_PAGE;
+  const rows = filteredData.slice(start, start + PER_PAGE);
+
+  const sa = col => col === sortCol ? ' sorted' : '';
+  const arrow = col => `<span class="sort-arrow">${col === sortCol ? (sortDir === -1 ? '↓' : '↑') : '↕'}</span>`;
+
+  let html = `<table>
+    <thead>
+      <tr>
+        <th onclick="sortBy('name')" class="${sa('name')}">Utilisateur${arrow('name')}</th>
+        <th onclick="sortBy('entree_time')" class="${sa('entree_time')}">Entrée${arrow('entree_time')}</th>
+        <th onclick="sortBy('sortie_time')" class="${sa('sortie_time')}">Sortie${arrow('sortie_time')}</th>
+        <th onclick="sortBy('duration_min')" class="${sa('duration_min')}">Durée${arrow('duration_min')}</th>
+        <th onclick="sortBy('rssi')" class="${sa('rssi')}">RSSI${arrow('rssi')}</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+  rows.forEach(row => {
+    const entreeTime = row.entree_time ? fmtTime(row.entree_time) : '—';
+    const sortieTime = row.sortie_time ? fmtTime(row.sortie_time) : '—';
+    const duration = row.duration_min != null ? fmtDuration(row.duration_min) : '—';
+    const rssi = row.rssi != null ? row.rssi : '—';
+
+    html += `<tr>
+      <td class="td-name">${row.name}</td>
+      <td class="td-entree">${entreeTime}</td>
+      <td class="td-sortie">${sortieTime}</td>
+      <td class="td-duration">${duration}</td>
+      <td class="td-rssi">${rssi !== '—' ? renderRssi(rssi) : '—'}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('tableBody').innerHTML = html;
+
+  // Pagination
+  if (totalPages > 1) {
+    document.getElementById('pagination').style.display = 'flex';
+    document.getElementById('pageInfo').textContent =
+      `${start + 1}–${Math.min(start + PER_PAGE, total)} sur ${total}`;
+
+    let btns = `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>←</button>`;
+    for (let p = 1; p <= totalPages; p++) {
+      if (totalPages > 7 && p > 2 && p < totalPages - 1 && Math.abs(p - currentPage) > 1) {
+        if (p === 3 || p === totalPages - 2) btns += `<button class="page-btn" disabled>…</button>`;
+        continue;
+      }
+      btns += `<button class="page-btn ${p===currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`;
+    }
+    btns += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===totalPages?'disabled':''}>→</button>`;
+    document.getElementById('pageBtns').innerHTML = btns;
+  } else {
+    document.getElementById('pagination').style.display = 'none';
+  }
+}
+
+function goPage(p) {
+  const total = Math.ceil(filteredData.length / PER_PAGE);
+  if (p < 1 || p > total) return;
+  currentPage = p;
+  renderTable();
+  window.scrollTo(0, 0);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmtTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const date = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  return `<span style="color:var(--text-dim);margin-right:6px">${date}</span>${time}`;
+}
+
+function fmtDuration(minutes) {
+  if (minutes == null) return '—';
+  if (minutes < 1) return '< 1 min';
+  if (minutes < 60) return `${Math.round(minutes)} min`;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function renderRssi(rssi) {
+  // -40 excellent, -80 faible
+  const pct = Math.min(1, Math.max(0, (rssi + 100) / 60));
+  const bars = 4;
+  const filled = Math.round(pct * bars);
+  let dots = '<div class="rssi-dots">';
+  for (let i = 0; i < bars; i++) {
+    const h = 4 + i * 3;
+    dots += `<div class="rssi-dot ${i < filled ? 'active' : ''}" style="height:${h}px"></div>`;
+  }
+  dots += '</div>';
+  return `<div class="rssi-bar">${dots}<span>${rssi} dBm</span></div>`;
+}
+
+function reset() {
+  setDefaultDates(7);
+  document.getElementById('filterUser').value = '';
+  document.getElementById('filterEvent').value = '';
+  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.pill')[1].classList.add('active');
+  activePeriod = 7;
+  load();
+}
+
+function exportCSV() {
+  if (!filteredData.length) return;
+  const headers = ['Nom', 'Entrée', 'Sortie', 'Durée (min)', 'RSSI'];
+  const rows = filteredData.map(r => [
+    r.name,
+    r.entree_time || '',
+    r.sortie_time || '',
+    r.duration_min != null ? Math.round(r.duration_min) : '',
+    r.rssi || ''
+  ]);
+  const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `portail_insights_${fmtDate(new Date())}.csv`;
+  a.click();
+}
+</script>
+</body>
+</html>
