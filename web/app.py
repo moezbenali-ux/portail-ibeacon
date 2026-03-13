@@ -21,6 +21,7 @@ ADMIN_PASSWORD_HASH = os.getenv(
     hashlib.sha256("portail2026!".encode()).hexdigest()
 )
 SESSION_LIFETIME_HOURS = int(os.getenv("SESSION_LIFETIME_HOURS", "8"))
+DISPLAY_TOKEN = os.getenv("DISPLAY_TOKEN", "431189e19d626eb94f9199dd21ba8ad7efc4b63140ce7b445c3358353476b72a")
 
 app = Flask(__name__, static_folder=BASE_DIR, static_url_path="")
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "changez-moi-en-production-svp")
@@ -92,6 +93,9 @@ def api_health():
 
 @app.route("/api/display")
 def api_display():
+    token = request.headers.get("X-Display-Token", "")
+    if token != DISPLAY_TOKEN:
+        return jsonify({"error": "Non autorisé"}), 401
     try:
         if not os.path.exists(DISPLAY_FILE):
             return jsonify({"name": "En attente", "timestamp": None})
@@ -109,7 +113,6 @@ def api_display():
 @app.route("/current")
 def current():
     return api_display()
-
 
 # ── Pages protégées ────────────────────────────────────────────────────────────
 @app.route("/admin")

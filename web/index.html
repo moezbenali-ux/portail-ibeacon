@@ -253,7 +253,7 @@ function playBip() {
 
 async function refreshCurrent() {
   try {
-    const response = await fetch('/current');
+    const response = await fetch('/current', { headers: { 'X-Display-Token': 'DISPLAY_TOKEN_ICI' } });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const name = data.name || '';
