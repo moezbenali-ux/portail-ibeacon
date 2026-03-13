@@ -1,368 +1,702 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Radar des Balises Bluetooth</title>
-  <style>
-    :root {
-      --bg: #0b1020;
-      --panel: #121a2b;
-      --panel-2: #18233a;
-      --text: #eaf1ff;
-      --muted: #9fb0d0;
-      --line: #28334d;
-      --accent: #4f8cff;
-      --ok: #1fbf75;
-      --warn: #ffb020;
-      --danger: #ff5d73;
-      --shadow: 0 12px 28px rgba(0,0,0,.28);
-      --radius: 18px;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Radar — Portail</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --surface: #111418;
+    --surface2: #141920;
+    --border: #1e2329;
+    --border-light: #2a3040;
+    --text: #e8eaed;
+    --text-muted: #6b7585;
+    --text-dim: #3a4455;
+    --accent: #4ade80;
+    --accent-dim: rgba(74,222,128,0.08);
+    --accent-border: rgba(74,222,128,0.2);
+    --warn: #fbbf24;
+    --warn-dim: rgba(251,191,36,0.08);
+    --warn-border: rgba(251,191,36,0.2);
+    --danger: #f87171;
+    --danger-dim: rgba(248,113,113,0.08);
+    --danger-border: rgba(248,113,113,0.2);
+    --blue: #60a5fa;
+    --mono: 'DM Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
 
-    * { box-sizing: border-box; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
-      margin: 0;
-      font-family: Inter, Arial, sans-serif;
-      background: linear-gradient(180deg, #0a1020 0%, #0d1326 100%);
-      color: var(--text);
-    }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    font-size: 14px;
+  }
 
-    .wrap {
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 24px;
-    }
+  /* ── Header ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+  }
 
-    .topbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 24px;
-      flex-wrap: wrap;
-    }
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
 
-    .title h1 {
-      margin: 0;
-      font-size: 32px;
-    }
+  .nav-tabs {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
 
-    .title p {
-      margin: 8px 0 0;
-      color: var(--muted);
-    }
+  .nav-tab {
+    padding: 6px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-decoration: none;
+    background: transparent;
+    transition: all 0.15s;
+    border-right: 1px solid var(--border);
+  }
 
-    .actions {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
+  .nav-tab:last-child { border-right: none; }
+  .nav-tab:hover { background: var(--surface); color: var(--text); }
+  .nav-tab.active { background: var(--surface); color: var(--accent); }
 
-    .btn {
-      border: 0;
-      border-radius: 14px;
-      padding: 12px 16px;
-      font-weight: 700;
-      cursor: pointer;
-      color: white;
-      background: var(--accent);
-      box-shadow: var(--shadow);
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
+  /* ── Layout ── */
+  main { padding: 32px; max-width: 1400px; margin: 0 auto; }
 
-    .btn.secondary {
-      background: #24314f;
-      border: 1px solid var(--line);
-      box-shadow: none;
-    }
+  /* ── Toolbar ── */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
 
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-      margin-bottom: 22px;
-    }
+  .toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
 
-    .card {
-      background: rgba(18,26,43,.96);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-    }
+  .page-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
 
-    .stat {
-      padding: 18px;
-    }
+  .refresh-status {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
 
-    .stat .label {
-      color: var(--muted);
-      font-size: 13px;
-      margin-bottom: 8px;
-    }
+  .refresh-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+  }
 
-    .stat .value {
-      font-size: 28px;
-      font-weight: 800;
-    }
+  .refresh-dot.paused {
+    background: var(--text-dim);
+    box-shadow: none;
+  }
 
-    .panel-header {
-      padding: 18px 20px;
-      border-bottom: 1px solid var(--line);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-    }
+  .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
 
-    .panel-header h2 {
-      margin: 0;
-      font-size: 18px;
-    }
+  .btn {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 5px;
+    border: 1px solid var(--border-light);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
 
-    .panel-header .sub {
-      color: var(--muted);
-      font-size: 13px;
-      margin-top: 4px;
-    }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
 
-    .panel-body {
-      padding: 18px;
-    }
+  .btn.pause-active {
+    border-color: var(--warn-border);
+    color: var(--warn);
+    background: var(--warn-dim);
+  }
 
-    .error {
-      margin-bottom: 16px;
-      padding: 14px 16px;
-      border-radius: 14px;
-      background: rgba(255,93,115,.12);
-      color: #ffd4db;
-      border: 1px solid rgba(255,93,115,.25);
-      display: none;
-    }
+  /* ── Sort controls ── */
+  .sort-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
 
-    .list {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 16px;
-    }
+  .sort-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
 
-    .beacon-card {
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      background: #141d31;
-      padding: 16px;
-    }
+  .sort-pill {
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
 
-    .beacon-title {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
+  .sort-pill:hover { border-color: var(--border-light); color: var(--text); }
+  .sort-pill.active { border-color: var(--accent-border); color: var(--accent); background: var(--accent-dim); }
 
-    .beacon-title strong {
-      font-size: 16px;
-    }
+  /* ── Stats ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
 
-    .chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      border-radius: 999px;
-      padding: 6px 10px;
-      font-size: 12px;
-      font-weight: 700;
-      border: 1px solid var(--line);
-      background: #24314f;
-    }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+  }
 
-    .chip.ok {
-      color: #bff6d8;
-      border-color: rgba(31,191,117,.35);
-    }
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
 
-    .chip.warn {
-      color: #ffe2a8;
-      border-color: rgba(255,176,32,.35);
-    }
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 500;
+    color: var(--text);
+  }
 
-    .chip.danger {
-      color: #ffd4db;
-      border-color: rgba(255,93,115,.35);
-    }
+  .stat-value.green { color: var(--accent); }
+  .stat-value.warn  { color: var(--warn); }
 
-    .meta {
-      display: grid;
-      gap: 6px;
-      font-size: 13px;
-      color: var(--muted);
-    }
+  /* ── Filter ── */
+  .filter-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
 
-    .meta .mono {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 12px;
-      color: #d9e6ff;
-      word-break: break-all;
-    }
+  .filter-input {
+    flex: 1;
+    min-width: 200px;
+    background: var(--bg);
+    border: 1px solid var(--border-light);
+    color: var(--text);
+    padding: 7px 12px;
+    border-radius: 5px;
+    font-family: var(--mono);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
 
-    .empty {
-      color: var(--muted);
-      text-align: center;
-      padding: 30px;
-    }
+  .filter-input:focus { border-color: var(--accent); }
+  .filter-input::placeholder { color: var(--text-dim); }
 
-    @media (max-width: 900px) {
-      .stats {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
+  .filter-toggle {
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .filter-toggle:hover { border-color: var(--border-light); color: var(--text); }
+  .filter-toggle.active { border-color: var(--accent-border); color: var(--accent); background: var(--accent-dim); }
+
+  /* ── Table ── */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .table-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .table-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .last-update {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+
+  thead th {
+    padding: 10px 16px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  thead th:hover { color: var(--text); }
+  thead th.sorted { color: var(--accent); }
+  .sort-arrow { margin-left: 4px; opacity: 0.5; }
+  thead th.sorted .sort-arrow { opacity: 1; }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+  td {
+    padding: 11px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    vertical-align: middle;
+  }
+
+  .td-name {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .td-unknown { color: var(--text-dim); font-style: italic; }
+
+  .rssi-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .rssi-bar-wrap {
+    width: 60px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .rssi-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+
+  .rssi-ok     { color: var(--accent); }
+  .rssi-warn   { color: var(--warn); }
+  .rssi-danger { color: var(--danger); }
+  .fill-ok     { background: var(--accent); }
+  .fill-warn   { background: var(--warn); }
+  .fill-danger { background: var(--danger); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+  }
+
+  .badge-known {
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
+  }
+
+  .badge-unknown {
+    background: var(--border);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+
+  .empty {
+    padding: 60px;
+    text-align: center;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  @media (max-width: 900px) {
+    .stats { grid-template-columns: repeat(2,1fr); }
+    main { padding: 16px; }
+    header { padding: 0 16px; }
+  }
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="topbar">
-      <div class="title">
-        <h1>🕸️ Radar des Balises Bluetooth</h1>
-        <p>Visualisation des balises récemment vues par le système.</p>
-      </div>
-      <div class="actions">
-        <a class="btn secondary" href="/">Accueil</a>
-        <a class="btn secondary" href="/admin">Administration</a>
-        <button class="btn" onclick="loadBeacons()">🔄 Actualiser</button>
+
+<header>
+  <div class="logo">
+    PORTAIL / RADAR
+  </div>
+  <nav class="nav-tabs">
+    <a href="/" class="nav-tab">Accueil</a>
+    <a href="/admin" class="nav-tab">Admin</a>
+    <a href="/insights" class="nav-tab">Insights</a>
+    <a href="/radar.html" class="nav-tab active">Radar</a>
+  </nav>
+</header>
+
+<main>
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <div class="page-title">Radar balises</div>
+      <div class="refresh-status">
+        <div class="refresh-dot" id="refreshDot"></div>
+        <span id="refreshLabel">Refresh 15s</span>
       </div>
     </div>
-
-    <div id="errorMessage" class="error"></div>
-
-    <div class="stats">
-      <div class="card stat">
-        <div class="label">Balises détectées</div>
-        <div class="value" id="beaconsCount">0</div>
+    <div class="toolbar-right">
+      <div class="sort-bar">
+        <span class="sort-label">Tri</span>
+        <button class="sort-pill active" id="sortRssi" onclick="setSort('rssi')">RSSI ↓</button>
+        <button class="sort-pill" id="sortName" onclick="setSort('name')">Nom</button>
+        <button class="sort-pill" id="sortTime" onclick="setSort('time')">Récent</button>
       </div>
-      <div class="card stat">
-        <div class="label">Signal moyen</div>
-        <div class="value" id="avgSignal">-</div>
-      </div>
-      <div class="card stat">
-        <div class="label">Balises reconnues</div>
-        <div class="value" id="authorizedCount">0</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="panel-header">
-        <div>
-          <h2>📡 Balises détectées</h2>
-          <div class="sub">Liste des balises récemment vues avec association utilisateur si disponible</div>
-        </div>
-      </div>
-      <div class="panel-body">
-        <div id="beaconsList" class="list"></div>
-      </div>
+      <button class="btn" id="pauseBtn" onclick="togglePause()">⏸ Pause</button>
+      <button class="btn" onclick="loadBeacons()">↺ Actualiser</button>
     </div>
   </div>
 
-  <script>
-    function showError(message) {
-      const el = document.getElementById('errorMessage');
-      el.style.display = 'block';
-      el.textContent = `Erreur de chargement: ${message}`;
-    }
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-label">Balises détectées</div>
+      <div class="stat-value" id="statTotal">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Reconnues</div>
+      <div class="stat-value green" id="statKnown">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Inconnues</div>
+      <div class="stat-value" id="statUnknown">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Signal moyen</div>
+      <div class="stat-value" id="statAvg">—</div>
+    </div>
+  </div>
 
-    function hideError() {
-      const el = document.getElementById('errorMessage');
-      el.style.display = 'none';
-      el.textContent = '';
-    }
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <input class="filter-input" type="text" id="filterInput"
+           placeholder="Filtrer par nom, UUID, MAC, major, minor..."
+           oninput="applyFilter()">
+    <button class="filter-toggle" id="toggleKnown" onclick="toggleKnown()">Reconnues</button>
+    <button class="filter-toggle" id="toggleUnknown" onclick="toggleUnknown()">Inconnues</button>
+    <button class="filter-toggle" id="toggleStrong" onclick="toggleStrong()">Signal fort (≥ -70)</button>
+  </div>
 
-    function esc(v) {
-      if (v === null || v === undefined) return '-';
-      return String(v)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#039;');
-    }
+  <!-- Table -->
+  <div class="table-wrap">
+    <div class="table-header">
+      <div class="table-title">BALISES RÉCENTES</div>
+      <div class="last-update" id="lastUpdate">—</div>
+    </div>
+    <div id="tableBody">
+      <div class="empty">Chargement...</div>
+    </div>
+  </div>
+</main>
 
-    function rssiChip(rssi) {
-      if (rssi === null || rssi === undefined) {
-        return '<span class="chip">RSSI -</span>';
-      }
-      if (rssi >= -70) {
-        return `<span class="chip ok">${rssi} dBm</span>`;
-      }
-      if (rssi >= -85) {
-        return `<span class="chip warn">${rssi} dBm</span>`;
-      }
-      return `<span class="chip danger">${rssi} dBm</span>`;
-    }
+<script>
+let allBeacons = [];
+let filteredBeacons = [];
+let sortMode = 'rssi';
+let paused = false;
+let intervalId = null;
+let showKnown = false;
+let showUnknown = false;
+let showStrong = false;
 
-    async function loadBeacons() {
-      try {
-        hideError();
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.onload = () => {
+  loadBeacons();
+  startInterval();
+};
 
-        const response = await fetch('/api/beacons/recent');
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
+function startInterval() {
+  if (intervalId) clearInterval(intervalId);
+  intervalId = setInterval(loadBeacons, 15000);
+}
 
-        const data = await response.json();
-        const beacons = Array.isArray(data) ? data : (data.beacons || []);
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('pauseBtn');
+  const dot = document.getElementById('refreshDot');
+  const lbl = document.getElementById('refreshLabel');
 
-        document.getElementById('beaconsCount').textContent = beacons.length;
-
-        const validRssi = beacons
-          .map(b => b.last_rssi)
-          .filter(v => v !== null && v !== undefined && !Number.isNaN(Number(v)))
-          .map(Number);
-
-        if (validRssi.length > 0) {
-          const avg = validRssi.reduce((a, b) => a + b, 0) / validRssi.length;
-          document.getElementById('avgSignal').textContent = `${avg.toFixed(0)} dBm`;
-        } else {
-          document.getElementById('avgSignal').textContent = '-';
-        }
-
-        const recognized = beacons.filter(b => b.user_id || b.user_name).length;
-        document.getElementById('authorizedCount').textContent = recognized;
-
-        const container = document.getElementById('beaconsList');
-
-        if (!beacons.length) {
-          container.innerHTML = '<div class="empty">Aucune balise détectée récemment.</div>';
-          return;
-        }
-
-        container.innerHTML = beacons.map(b => `
-          <div class="beacon-card">
-            <div class="beacon-title">
-              <strong>${esc(b.user_name || 'Balise inconnue')}</strong>
-              ${rssiChip(b.last_rssi)}
-            </div>
-            <div class="meta">
-              <div><strong>Dernière vue :</strong> ${esc(b.last_seen)}</div>
-              <div><strong>UUID :</strong> <span class="mono">${esc(b.uuid)}</span></div>
-              <div><strong>Major :</strong> ${esc(b.major)}</div>
-              <div><strong>Minor :</strong> ${esc(b.minor)}</div>
-              <div><strong>MAC :</strong> <span class="mono">${esc(b.mac)}</span></div>
-              <div><strong>Vues :</strong> ${esc(b.seen_count)}</div>
-            </div>
-          </div>
-        `).join('');
-      } catch (err) {
-        console.error(err);
-        showError(err.message);
-      }
-    }
-
+  if (paused) {
+    clearInterval(intervalId);
+    btn.textContent = '▶ Reprendre';
+    btn.classList.add('pause-active');
+    dot.classList.add('paused');
+    lbl.textContent = 'Pausé';
+  } else {
+    startInterval();
+    btn.textContent = '⏸ Pause';
+    btn.classList.remove('pause-active');
+    dot.classList.remove('paused');
+    lbl.textContent = 'Refresh 15s';
     loadBeacons();
-    setInterval(loadBeacons, 15000);
-  </script>
+  }
+}
+
+// ── Sort ──────────────────────────────────────────────────────────────────────
+function setSort(mode) {
+  sortMode = mode;
+  document.querySelectorAll('.sort-pill').forEach(p => p.classList.remove('active'));
+  document.getElementById('sort' + mode.charAt(0).toUpperCase() + mode.slice(1)).classList.add('active');
+  render();
+}
+
+function sortBeacons(beacons) {
+  return [...beacons].sort((a, b) => {
+    if (sortMode === 'rssi') {
+      const ra = a.last_rssi ?? -999;
+      const rb = b.last_rssi ?? -999;
+      return rb - ra; // descendant
+    }
+    if (sortMode === 'name') {
+      const na = (a.user_name || 'zzz').toLowerCase();
+      const nb = (b.user_name || 'zzz').toLowerCase();
+      return na.localeCompare(nb);
+    }
+    if (sortMode === 'time') {
+      return (b.last_seen || '').localeCompare(a.last_seen || '');
+    }
+    return 0;
+  });
+}
+
+// ── Filters ───────────────────────────────────────────────────────────────────
+function toggleKnown() {
+  showKnown = !showKnown;
+  document.getElementById('toggleKnown').classList.toggle('active', showKnown);
+  applyFilter();
+}
+
+function toggleUnknown() {
+  showUnknown = !showUnknown;
+  document.getElementById('toggleUnknown').classList.toggle('active', showUnknown);
+  applyFilter();
+}
+
+function toggleStrong() {
+  showStrong = !showStrong;
+  document.getElementById('toggleStrong').classList.toggle('active', showStrong);
+  applyFilter();
+}
+
+function applyFilter() {
+  const q = document.getElementById('filterInput').value.toLowerCase().trim();
+
+  filteredBeacons = allBeacons.filter(b => {
+    if (showKnown && !b.user_name) return false;
+    if (showUnknown && b.user_name) return false;
+    if (showStrong && (b.last_rssi == null || b.last_rssi < -70)) return false;
+
+    if (!q) return true;
+    return (
+      (b.user_name || '').toLowerCase().includes(q) ||
+      (b.uuid || '').toLowerCase().includes(q) ||
+      (b.mac || '').toLowerCase().includes(q) ||
+      String(b.major || '').includes(q) ||
+      String(b.minor || '').includes(q)
+    );
+  });
+
+  render();
+}
+
+// ── Load ──────────────────────────────────────────────────────────────────────
+async function loadBeacons() {
+  try {
+    const r = await fetch('/api/beacons/recent');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    allBeacons = Array.isArray(data) ? data : (data.beacons || []);
+
+    // Stats
+    const known = allBeacons.filter(b => b.user_name).length;
+    const rssis = allBeacons.map(b => b.last_rssi).filter(v => v != null);
+    const avg = rssis.length ? (rssis.reduce((a,b) => a+b, 0) / rssis.length).toFixed(0) : '—';
+
+    document.getElementById('statTotal').textContent = allBeacons.length;
+    document.getElementById('statKnown').textContent = known;
+    document.getElementById('statUnknown').textContent = allBeacons.length - known;
+    document.getElementById('statAvg').textContent = avg !== '—' ? avg + ' dBm' : '—';
+    document.getElementById('lastUpdate').textContent = 'Mis à jour ' + new Date().toLocaleTimeString('fr-FR');
+
+    applyFilter();
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render() {
+  const sorted = sortBeacons(filteredBeacons);
+  const body = document.getElementById('tableBody');
+
+  if (!sorted.length) {
+    body.innerHTML = '<div class="empty">Aucune balise trouvée</div>';
+    return;
+  }
+
+  const sa = col => col === sortMode ? ' sorted' : '';
+  const arrow = col => `<span class="sort-arrow">${col === sortMode ? '↓' : '↕'}</span>`;
+
+  let html = `<table>
+    <thead>
+      <tr>
+        <th onclick="setSort('name')" class="${sa('name')}">Nom${arrow('name')}</th>
+        <th>Statut</th>
+        <th onclick="setSort('rssi')" class="${sa('rssi')}">RSSI${arrow('rssi')}</th>
+        <th>UUID</th>
+        <th>Major</th>
+        <th>Minor</th>
+        <th>MAC</th>
+        <th>Vues</th>
+        <th onclick="setSort('time')" class="${sa('time')}">Dernière vue${arrow('time')}</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+  sorted.forEach(b => {
+    const rssi = b.last_rssi;
+    const rssiClass = rssi == null ? '' : rssi >= -70 ? 'rssi-ok' : rssi >= -85 ? 'rssi-warn' : 'rssi-danger';
+    const fillClass = rssi == null ? '' : rssi >= -70 ? 'fill-ok' : rssi >= -85 ? 'fill-warn' : 'fill-danger';
+    const pct = rssi == null ? 0 : Math.min(100, Math.max(0, (rssi + 100) / 60 * 100));
+    const rssiStr = rssi != null ? `${rssi} dBm` : '—';
+
+    const name = b.user_name
+      ? `<span class="td-name">${esc(b.user_name)}</span>`
+      : `<span class="td-name td-unknown">Inconnue</span>`;
+
+    const badge = b.user_name
+      ? `<span class="badge badge-known">Reconnue</span>`
+      : `<span class="badge badge-unknown">Inconnue</span>`;
+
+    html += `<tr>
+      <td>${name}</td>
+      <td>${badge}</td>
+      <td>
+        <div class="rssi-cell">
+          <span class="${rssiClass}">${rssiStr}</span>
+          <div class="rssi-bar-wrap">
+            <div class="rssi-bar-fill ${fillClass}" style="width:${pct}%"></div>
+          </div>
+        </div>
+      </td>
+      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis">${esc(b.uuid)}</td>
+      <td>${esc(b.major)}</td>
+      <td>${esc(b.minor)}</td>
+      <td>${esc(b.mac)}</td>
+      <td>${esc(b.seen_count)}</td>
+      <td>${esc(b.last_seen)}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  body.innerHTML = html;
+}
+
+function esc(v) {
+  if (v == null) return '<span style="color:var(--text-dim)">—</span>';
+  return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
 </body>
 </html>
