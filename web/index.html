@@ -18,9 +18,7 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
+      display: block;
       background: radial-gradient(circle at top, #162544 0%, #0b1020 55%);
       font-family: Inter, Arial, sans-serif;
       color: var(--text);
@@ -28,7 +26,7 @@
 
     #clock {
       position: fixed;
-      top: 18px;
+      top: 70px;
       right: 28px;
       font-size: 15px;
       font-weight: 600;
@@ -88,7 +86,6 @@
       margin-bottom: 20px;
     }
 
-    /* ✅ Badge entrée / sortie */
     .side-badge {
       display: inline-flex;
       align-items: center;
@@ -129,44 +126,34 @@
       50%       { opacity: .5; transform: scale(1.4); }
     }
 
-    .actions {
-      display: flex;
-      justify-content: center;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-top: 24px;
-    }
-    .btn {
-      text-decoration: none;
-      color: white;
-      background: var(--accent);
-      padding: 12px 18px;
-      border-radius: 14px;
-      font-weight: 700;
-      box-shadow: var(--shadow);
-    }
-    .btn.secondary {
-      background: #24314f;
-      border: 1px solid var(--line);
-      box-shadow: none;
-    }
     @media (max-width: 700px) {
       .current-name { font-size: 34px; }
       .current-name.waiting { font-size: 26px; }
-      #clock { font-size: 13px; padding: 5px 12px; right: 12px; }
+      #clock { font-size: 13px; padding: 5px 12px; right: 12px; top: 64px; }
     }
   </style>
 </head>
 <body>
 
-  <div id="clock">--:--:--</div>
+<header style="border-bottom:1px solid #1e2329;padding:0 32px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#0a0c0f;z-index:10;font-family:DM Mono,monospace">
+  <span style="font-size:13px;color:#6b7585;letter-spacing:.05em">PORTAIL / ACCUEIL</span>
+  <nav style="display:flex;border:1px solid #1e2329;border-radius:6px;overflow:hidden">
+    <a href="/" style="padding:6px 16px;font-size:12px;color:#4ade80;text-decoration:none;background:#111418;border-right:1px solid #1e2329">Accueil</a>
+    <a href="/admin" style="padding:6px 16px;font-size:12px;color:#6b7585;text-decoration:none;border-right:1px solid #1e2329">Admin</a>
+    <a href="/insights" style="padding:6px 16px;font-size:12px;color:#6b7585;text-decoration:none;border-right:1px solid #1e2329">Insights</a>
+    <a href="/radar.html" style="padding:6px 16px;font-size:12px;color:#6b7585;text-decoration:none;border-right:1px solid #1e2329">Radar</a>
+    <a href="/logout" style="padding:6px 16px;font-size:12px;color:#6b7585;text-decoration:none">Déconnexion</a>
+  </nav>
+</header>
 
+<div id="clock">--:--:--</div>
+
+<div style="min-height:calc(100vh - 56px);display:grid;place-items:center">
   <div class="panel">
     <div class="badge">Portail Roole</div>
     <h1>Accès portail</h1>
     <div class="sub">Dernière balise reconnue</div>
 
-    <!-- ✅ Badge entrée / sortie -->
     <div id="sideBadge" class="side-badge hidden">
       <span class="dot"></span>
       <span id="sideLabel"></span>
@@ -174,110 +161,101 @@
 
     <div id="currentName" class="current-name waiting">En attente</div>
     <div id="currentTime" class="current-time"></div>
-    <div class="actions">
-      <a class="btn secondary" href="/radar.html">Radar</a>
-      <a class="btn secondary" href="/admin">Administration</a>
-    </div>
   </div>
+</div>
 
-  <script>
-    const DISPLAY_DURATION_MS = 60 * 1000;
+<script>
+  const DISPLAY_DURATION_MS = 60 * 1000;
 
-    // ── Horloge ─────────────────────────────────────────────────────────────
-    function updateClock() {
-      const now = new Date();
-      const d = now.toLocaleDateString('fr-FR', {
-        weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric'
-      });
-      const t = now.toLocaleTimeString('fr-FR');
-      document.getElementById('clock').textContent = `${d}  ${t}`;
-    }
-    updateClock();
-    setInterval(updateClock, 1000);
+  function updateClock() {
+    const now = new Date();
+    const d = now.toLocaleDateString('fr-FR', {
+      weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric'
+    });
+    const t = now.toLocaleTimeString('fr-FR');
+    document.getElementById('clock').textContent = `${d}  ${t}`;
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
-    function formatTs(ts) {
-      if (!ts) return '';
-      return new Date(ts * 1000).toLocaleString('fr-FR');
-    }
+  function formatTs(ts) {
+    if (!ts) return '';
+    return new Date(ts * 1000).toLocaleString('fr-FR');
+  }
 
-    function setWaiting() {
-      const el = document.getElementById('currentName');
-      el.textContent = 'En attente';
-      el.classList.add('waiting');
-      document.getElementById('currentTime').textContent = '';
-      // Masquer le badge côté
-      const badge = document.getElementById('sideBadge');
+  function setWaiting() {
+    const el = document.getElementById('currentName');
+    el.textContent = 'En attente';
+    el.classList.add('waiting');
+    document.getElementById('currentTime').textContent = '';
+    const badge = document.getElementById('sideBadge');
+    badge.className = 'side-badge hidden';
+  }
+
+  function setName(name, ts, side) {
+    const el = document.getElementById('currentName');
+    el.textContent = name;
+    el.classList.remove('waiting');
+    document.getElementById('currentTime').textContent = formatTs(ts);
+
+    const badge = document.getElementById('sideBadge');
+    const label = document.getElementById('sideLabel');
+    if (side === 'entree') {
+      badge.className = 'side-badge entree';
+      label.textContent = '↓ Entrée';
+    } else if (side === 'sortie') {
+      badge.className = 'side-badge sortie';
+      label.textContent = '↑ Sortie';
+    } else {
       badge.className = 'side-badge hidden';
     }
-
-    function setName(name, ts, side) {
-      // Nom
-      const el = document.getElementById('currentName');
-      el.textContent = name;
-      el.classList.remove('waiting');
-      document.getElementById('currentTime').textContent = formatTs(ts);
-
-      // ✅ Badge entrée / sortie
-      const badge  = document.getElementById('sideBadge');
-      const label  = document.getElementById('sideLabel');
-      if (side === 'entree') {
-        badge.className = 'side-badge entree';
-        label.textContent = '↓ Entrée';
-      } else if (side === 'sortie') {
-        badge.className = 'side-badge sortie';
-        label.textContent = '↑ Sortie';
-      } else {
-        badge.className = 'side-badge hidden';
-      }
-    }
-
-    // ── Polling ──────────────────────────────────────────────────────────────
-let lastOpenTimestamp = null;
-
-function playBip() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.3);
-  } catch(e) {}
-}
-
-async function refreshCurrent() {
-  try {
-    const response = await fetch('/current', { headers: { 'X-Display-Token': 'DISPLAY_TOKEN_ICI' } });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    const name = data.name || '';
-    const ts   = data.timestamp || null;
-    const side = data.side || 'unknown';
-    const age  = ts ? (Date.now() / 1000 - ts) : Infinity;
-
-    if (ts && lastOpenTimestamp !== null && ts !== lastOpenTimestamp) {
-      playBip();
-    }
-    if (ts) lastOpenTimestamp = ts;
-
-    if (name && name !== 'En attente' && age < 60) {
-      setName(name, ts, side);
-    } else {
-      setWaiting();
-    }
-  } catch (err) {
-    setWaiting();
-    console.error(err);
   }
-}
-refreshCurrent();
-setInterval(refreshCurrent, 2000);
-  </script>
+
+  let lastOpenTimestamp = null;
+
+  function playBip() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+    } catch(e) {}
+  }
+
+  async function refreshCurrent() {
+    try {
+      const response = await fetch('/current', { headers: { 'X-Display-Token': 'DISPLAY_TOKEN_ICI' } });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      const name = data.name || '';
+      const ts   = data.timestamp || null;
+      const side = data.side || 'unknown';
+      const age  = ts ? (Date.now() / 1000 - ts) : Infinity;
+
+      if (ts && lastOpenTimestamp !== null && ts !== lastOpenTimestamp) {
+        playBip();
+      }
+      if (ts) lastOpenTimestamp = ts;
+
+      if (name && name !== 'En attente' && age < 60) {
+        setName(name, ts, side);
+      } else {
+        setWaiting();
+      }
+    } catch (err) {
+      setWaiting();
+      console.error(err);
+    }
+  }
+  refreshCurrent();
+  setInterval(refreshCurrent, 2000);
+</script>
 </body>
 </html>
